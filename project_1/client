@@ -1,14 +1,29 @@
 #!/bin/sh
-PORT=${1:-27995}
-
-if [ $2 == "-s" ]
+if [ $1 == "-p" ]
 then
-	S_FLAG=1
-	HOST=$3
-	ID=$4
+	PORT=$2
+	if [ $3 == "-s" ]
+	then
+		S_FLAG=1
+	    HOST=$4
+    	ID=$5
+	else
+		S_FLAG=0
+	    HOST=$3
+    	ID=$4
+	fi
 else
-	S_FLAG=0
-	HOST=$2
-	ID=$3
+	PORT=27995
+	if [ $1 == "-s" ]
+	then
+		PORT=27996
+		S_FLAG=1
+		HOST=$2
+		ID=$3
+	else
+		S_FLAG=0
+		HOST=$1
+		ID=$2
+	fi
 fi
-python client.py
+python client.py $PORT $S_FLAG $HOST $ID
