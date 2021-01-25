@@ -1,2 +1,14 @@
 #!/bin/sh
+PORT=${1:-27995}
+
+if [ $2 == "-s" ]
+then
+	S_FLAG=1
+	HOST=$3
+	ID=$4
+else
+	S_FLAG=0
+	HOST=$2
+	ID=$3
+fi
 python client.py
