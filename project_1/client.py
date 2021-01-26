@@ -1,4 +1,4 @@
-import socket, sys, ssl
+import socket, sys, ssl, time
 
 PORT = int(sys.argv[1])
 S_FLAG = int(sys.argv[2])
@@ -22,21 +22,28 @@ else:
     print("Error connecting")
     sys.exit()
 
+# send HELLO messsge
 s.send(HELLO)
 
 while 1: 
-  #receive FIND or BYE response
-  resp = ''
+  # receive FIND or BYE response
+  response = ''
+  timeout = time.time() + 60
   while 1:
-    resp += s.recv(8192)
-    if resp.endswith("\n"):
+    response += s.recv(8192)
+    if response.endswith("\n"):
       break
-  response_split = resp.split(" ")   
+    elif time.time() > timeout:
+      print("Error reading from server")
+      sys.exit()
+      
+  response_split = response.split(" ")   
 
   if (len(response_split) != 3) and (len(response_split) != 4):
     print("Error: Bad response 2")
     sys.exit()
 
+  # deal with FIND response
   if response_split[1] == 'FIND':
     find_symbol = response_split[2]
     resp_str = response_split[3]
@@ -46,8 +53,10 @@ while 1:
       if i == find_symbol:
         count += 1
 
+    # send COUNT response
     s.send("cs3700spring2021 COUNT {}\n".format(count))
   elif response_split[1] == 'BYE':
+    # print secret flagz
     print(response_split[2].rstrip())
     break
   else:
