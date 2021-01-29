@@ -25,3 +25,7 @@ try:
 except:
   print('UH OH')
   sys.exit()
+
+s.send('USER {}\r\n'.format(USER))
+response = s.recv(8192)
+print(response)
