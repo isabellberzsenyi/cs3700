@@ -1,0 +1,19 @@
+#!/bin/sh
+OPERATION=$1
+case $OPERATION in
+  "ls") ARG1=$2
+    ;;
+  "mkdir") ARG1=$2
+    ;;
+  "rm") ARG1=$2
+    ;;
+  "rmdir") ARG1=$2
+    ;;
+  "cp") ARG1=$2
+    ARG2=$3
+    ;;
+  "mv") ARG1=$2
+    ARG2=$3
+    ;;
+esac
+python ftp.py $OPERATION $ARG1 $ARG2
