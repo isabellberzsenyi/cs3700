@@ -29,3 +29,11 @@ except:
 s.send('USER {}\r\n'.format(USER))
 response = s.recv(8192)
 print(response)
+s.send('PASS ' + PASSWORD + '\r\n')
+response = s.recv(8192)
+print(response)
+
+print('set type')
+s.send('TYPE I\r\n')
+response = s.recv(8192)
+print(response)
