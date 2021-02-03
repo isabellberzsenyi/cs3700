@@ -37,3 +37,18 @@ print('set type')
 s.send('TYPE I\r\n')
 response = s.recv(8192)
 print(response)
+
+print('set mode')
+s.send('MODE S\r\n')
+response = s.recv(8192)
+print(response)
+
+print('set stru')
+s.send('STRU F\r\n')
+response = s.recv(8192)
+print(response)
+
+print('quit')
+s.send('QUIT\r\n')
+response = s.recv(8192)
+print(response)
