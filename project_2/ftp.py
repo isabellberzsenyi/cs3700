@@ -1,22 +1,27 @@
-import socket, sys, re
+import socket, sys, re, os
 OPERATION = sys.argv[1]
-ARG1 = sys.argv[2].split('//')[1]
-parse_args = ARG1.split('@')
-#print(parse_args)
+if len(sys.argv) == 4:
+  if sys.argv[2].find("ftp") == -1:
+    ARG1 = sys.argv[3]
+    ARG2 = sys.argv[2]
+    DIRECTION = 'send'
+  else:
+    ARG1 = sys.argv[2]
+    ARG2 = sys.argv[3]
+    DIRECTION = 'retrieve'
+else:
+  ARG1 = sys.argv[2]
 
-if (len(sys.argv) == 4):
-  ARG2 = sys.argv[3]
+ARG1 = ARG1.split('//')[1]
+parse_args = ARG1.split('@')
+
 
 USER = parse_args[0].split(':')[0]
-#print('user', USER)
 if len(parse_args[0].split(':')) == 2:
   PASSWORD = parse_args[0].split(':')[1]
- # print('pass', PASSWORD)
 split_host = parse_args[1].split(':')
 if len(split_host) == 1:
-  # no port
   HOST = split_host[0].split('/', 1)[0]
-  #print('host', HOST)
 
   if len(split_host[0].split('/', 1)) == 2:
     PATH = split_host[0].split('/', 1)[1]
@@ -26,7 +31,6 @@ elif len(split_host) == 2:
   HOST = split_host[0]
   PORT = split_host[1].split('/', 1)[0]
   PATH = split_host[1].split('/', 1)[1]
-  #print('host, port + path', HOST, PORT, PATH)
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
@@ -37,11 +41,18 @@ except:
   sys.exit()
 
 s.send('USER {}\r\n'.format(USER))
-response = s.recv(8192)
-print(response)
-s.send('PASS ' + PASSWORD + '\r\n')
-response = s.recv(8192)
-print(response)
+
+while 1:
+  print("WHILE LOOP") 
+  response = s.recv(8192)
+  print("1", response)
+  if response.find('Please specify') != -1:
+    print(response.find('Please specify'))
+    break;
+if PASSWORD:
+  s.send('PASS ' + PASSWORD + '\r\n')
+  response = s.recv(8192)
+  print("2", response)
 
 print('set type')
 s.send('TYPE I\r\n')
@@ -66,6 +77,11 @@ if OPERATION == 'mkdir':
 elif OPERATION == 'rmdir':
   print('rmdir')
   s.send('RMD ' + PATH + '\r\n')
+  response = s.recv(8192)
+  print(response)
+elif OPERATION == 'rm':
+  print('remove')
+  s.send('DELE ' + PATH + '\r\n')
   response = s.recv(8192)
   print(response)
 else:
@@ -94,7 +110,65 @@ else:
     print(response)
     response = s.recv(8192)
     print(response)
+  elif OPERATION == 'cp':
+    if DIRECTION == 'send':
+      print('store')
+      s.send('STOR ' + PATH + '\r\n')
+      response = s.recv(8192).split(" ")[0]
+      print(response)
+      if response == "150":
+        f = open(ARG2, "r")
+        data.send(f.read())
+        data.close()
+        f.close()
+        response = s.recv(8192)
+        print(response)
+    else:
+      print('receive')
+      s.send('RETR ' + PATH + '\r\n')
+      response = s.recv(8192).split(" ")[0]
+      print(response)
+      if response == "150":
+        f = open(ARG2, "w")
+        response = data.recv(8192)
+        print(response)
+        f.write(response)
+        f.close()
+        response = s.recv(8192)
+        print(response)
+  elif OPERATION == 'mv':
+    if DIRECTION == 'send':
+      print('store')
+      s.send('STOR ' + PATH + '\r\n')
+      response = s.recv(8192).split(" ")[0]
+      print(response)
+      if response == "150":
+        f = open(ARG2, "r")
+        data.send(f.read())
+        data.close()
+        f.close()
+        response = s.recv(8192)
+        print(response)
+        os.remove(ARG2)
+    else:
+      print('receive')
+      s.send('RETR ' + PATH + '\r\n')
+      response = s.recv(8192)
+      print(response)
+      if response.split(" ")[0] == "150":
+        f = open(ARG2, "w")
+        response = data.recv(8192)
+        print(response)
+        f.write(response)
+        f.close()
+        response = s.recv(8192)
+        print(response)
+        s.send('DELE ' + PATH + '\r\n')
+        response = s.recv(8192)
+        print(response)
+
 print('quit')
 s.send('QUIT\r\n')
 response = s.recv(8192)
 print(response)
+s.close()
