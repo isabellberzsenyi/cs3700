@@ -1,9 +1,13 @@
 import socket, sys, re, os
-OPERATION = sys.argv[1]
+
 def check_response(resp):
   print(resp)
+  if resp.find('2') == -1:
+    print('Error occured!')
+    sys.exit()
+
 def main():
-  check_response("resp")
+  OPERATION = sys.argv[1]
   if len(sys.argv) == 4:
     if sys.argv[2].find("ftp") == -1:
       ARG1 = sys.argv[3]
@@ -37,7 +41,7 @@ def main():
 
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   try:
-    s.connect((HOST, 21))
+    s.connect((HOST, PORT))
   except:
     print('Error connecting to host socket')
     sys.exit()
@@ -52,6 +56,7 @@ def main():
       print('Error loging in')
       sys.exit()
       break
+  
   if PASSWORD:
     s.send('PASS ' + PASSWORD + '\r\n')
     response = s.recv(8192)
@@ -59,7 +64,7 @@ def main():
 
   s.send('TYPE I\r\n')
   response = s.recv(8192)
-  print(response)
+  check_response(response)
 
   s.send('MODE S\r\n')
   response = s.recv(8192)
