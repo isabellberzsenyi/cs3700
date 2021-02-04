@@ -2,7 +2,7 @@ import socket, sys, re, os
 
 def check_response(resp):
   print(resp)
-  if resp.find('2') == -1:
+  if resp.find('1') == -1 and resp.find('2') == -1:
     print('Error occured!')
     sys.exit()
 
@@ -22,14 +22,19 @@ def main():
 
   ARG1 = ARG1.split('//')[1]
   parse_args = ARG1.split('@')
-
+  
   USER = parse_args[0].split(':')[0]
+  if USER == "":
+    # no username provided
+    USER = "anonymous"
+
+  #check if password is given
   if len(parse_args[0].split(':')) == 2:
     PASSWORD = parse_args[0].split(':')[1]
   else:
     PASSWORD = ""
+  
   split_host = parse_args[1].split(':')
-
   if len(split_host) == 1:
     HOST = split_host[0].split('/', 1)[0]
     if len(split_host[0].split('/', 1)) == 2:
@@ -64,33 +69,27 @@ def main():
     print(response)
 
   s.send('TYPE I\r\n')
-  #response = s.recv(8192)
   check_response(s.recv(8192))
 
   s.send('MODE S\r\n')
-  #response = s.recv(8192)
   check_response(s.recv(8192))
 
   s.send('STRU F\r\n')
-  #response = s.recv(8192)
   check_response(s.recv(8192))
 
   if OPERATION == 'mkdir':
     s.send('MKD ' + PATH + '\r\n')
-    #response = s.recv(8192)
     check_response(s.recv(8192))
   elif OPERATION == 'rmdir':
     s.send('RMD ' + PATH + '\r\n')
-    #response = s.recv(8192)
     check_response(s.recv(8192))
   elif OPERATION == 'rm':
     s.send('DELE ' + PATH + '\r\n')
-    #response = s.recv(8192)
     check_response(s.recv(8192))
   else:
     s.send('PASV\r\n')
-    #response = s.recv(8192)
-    check_response(s.recv(8192))
+    response = s.recv(8192)
+    check_response(response)
 
     IP_PORT = re.split('[()]', response)[1]
     IP = reduce(lambda a, b: a + '.' + b,IP_PORT.split(',')[0:4])
@@ -104,45 +103,35 @@ def main():
       sys.exit()
     if OPERATION == 'ls':
       s.send('LIST ' + PATH + '\r\n')
-      #response = s.recv(8192)
       check_response(s.recv(8192))
       response = data.recv(8192)
       print(response)
-      #response = s.recv(8192)
       check_response(s.recv(8192))
     elif OPERATION == 'cp' or OPERATION == 'mv':
       if DIRECTION == 'send':
         s.send('STOR ' + PATH + '\r\n')
-        #response = s.recv(8192)
         check_response(s.recv(8192))
-        if response.split(" ")[0] == "150":
-          f = open(ARG2, "r")
-          data.send(f.read())
-          data.close()
-          f.close()
-          #response = s.recv(8192)
-          check_response(s.recv(8192))
-          if OPERATION == 'mv':
-            os.remove(ARG2)
+        f = open(ARG2, "r")
+        data.send(f.read())
+        data.close()
+        f.close()
+        check_response(s.recv(8192))
+        if OPERATION == 'mv':
+          os.remove(ARG2)
       else:
         s.send('RETR ' + PATH + '\r\n')
-        #response = s.recv(8192)
         check_response(s.recv(8192))
-        if response.split(" ")[0] == "150":
-          f = open(ARG2, "w")
-          response = data.recv(8192)
-          print(response)
-          f.write(response)
-          f.close()
-          #response = s.recv(8192)
+        f = open(ARG2, "w")
+        response = data.recv(8192)
+        print(response)
+        f.write(response)
+        f.close()
+        check_response(s.recv(8192))
+        if OPERATION == 'mv':
+          s.send('DELE ' + PATH + '\r\n')
           check_response(s.recv(8192))
-          if OPERATION == 'mv':
-            s.send('DELE ' + PATH + '\r\n')
-            #response = s.recv(8192)
-            check_response(s.recv(8192))
 
   s.send('QUIT\r\n')
-  #response = s.recv(8192)
   check_response(s.recv(8192))
   s.close()
 
