@@ -22,19 +22,24 @@ def main():
 
   ARG1 = ARG1.split('//')[1]
   parse_args = ARG1.split('@')
+  if len(parse_args) == 2:
+    #check if password is given
+    if len(parse_args[0].split(':')) == 2:
+      PASSWORD = parse_args[0].split(':')[1]
+    else:
+      PASSWORD = ""
   
-  USER = parse_args[0].split(':')[0]
-  if USER == "":
-    # no username provided
-    USER = "anonymous"
+    USER = parse_args[0].split(':')[0]
+    if USER == "":
+      # no username provided
+      USER = "anonymous"
+      PASSWORD = ""
 
-  #check if password is given
-  if len(parse_args[0].split(':')) == 2:
-    PASSWORD = parse_args[0].split(':')[1]
+    split_host = parse_args[1].split(':')
   else:
+    USER = "anonymous"
     PASSWORD = ""
-  
-  split_host = parse_args[1].split(':')
+    split_host = ARG1.split(':')
   if len(split_host) == 1:
     HOST = split_host[0].split('/', 1)[0]
     if len(split_host[0].split('/', 1)) == 2:
@@ -44,7 +49,7 @@ def main():
     HOST = split_host[0]
     PORT = split_host[1].split('/', 1)[0]
     PATH = split_host[1].split('/', 1)[1]
-
+  print(USER, PASSWORD, HOST, PORT, PATH)
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   try:
     s.connect((HOST, PORT))
