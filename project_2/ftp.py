@@ -139,3 +139,6 @@ def main():
   response = s.recv(8192)
   print(response)
   s.close()
+
+if __name__ == "__main__":
+  main()
