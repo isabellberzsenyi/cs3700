@@ -34,6 +34,7 @@ def main():
     HOST = split_host[0].split('/', 1)[0]
     if len(split_host[0].split('/', 1)) == 2:
       PATH = split_host[0].split('/', 1)[1]
+    PORT = 21
   elif len(split_host) == 2:
     HOST = split_host[0]
     PORT = split_host[1].split('/', 1)[0]
