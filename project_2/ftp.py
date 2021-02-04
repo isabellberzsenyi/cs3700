@@ -13,17 +13,22 @@ def main():
       ARG1 = sys.argv[3]
       ARG2 = sys.argv[2]
       DIRECTION = 'send'
-    else:
+    elif sys.argv[3].find("ftp") == -1:
       ARG1 = sys.argv[2]
       ARG2 = sys.argv[3]
       DIRECTION = 'retrieve'
+    else:
+      print('Incorrect ftp URL provided')
+      sys.exit()
   else:
     ARG1 = sys.argv[2]
 
   ARG1 = ARG1.split('//')[1]
   parse_args = ARG1.split('@')
+
+  # either username or password given
   if len(parse_args) == 2:
-    #check if password is given
+    # check if password is given
     if len(parse_args[0].split(':')) == 2:
       PASSWORD = parse_args[0].split(':')[1]
     else:
@@ -31,7 +36,7 @@ def main():
   
     USER = parse_args[0].split(':')[0]
     if USER == "":
-      # no username provided
+      # no username provided, go to default with password
       USER = "anonymous"
       PASSWORD = ""
 
@@ -40,16 +45,19 @@ def main():
     USER = "anonymous"
     PASSWORD = ""
     split_host = ARG1.split(':')
+
+  # check if port is given
   if len(split_host) == 1:
+    # port is given
     HOST = split_host[0].split('/', 1)[0]
-    if len(split_host[0].split('/', 1)) == 2:
-      PATH = split_host[0].split('/', 1)[1]
+    PATH = split_host[0].split('/', 1)[1]
     PORT = 21
   elif len(split_host) == 2:
     HOST = split_host[0]
     PORT = split_host[1].split('/', 1)[0]
     PATH = split_host[1].split('/', 1)[1]
-  print(USER, PASSWORD, HOST, PORT, PATH)
+
+  # connect to control channel
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   try:
     s.connect((HOST, PORT))
@@ -57,6 +65,7 @@ def main():
     print('Error connecting to host socket')
     sys.exit()
 
+  # send USER command
   s.send('USER {}\r\n'.format(USER))
   while 1:
     response = s.recv(8192)
@@ -68,20 +77,25 @@ def main():
       sys.exit()
       break
   
+  # send PASS command
   if PASSWORD:
     s.send('PASS ' + PASSWORD + '\r\n')
     response = s.recv(8192)
     print(response)
 
+  # send TYPE command
   s.send('TYPE I\r\n')
   check_response(s.recv(8192))
 
+  # send MODE command
   s.send('MODE S\r\n')
   check_response(s.recv(8192))
 
+  # send STRU command
   s.send('STRU F\r\n')
   check_response(s.recv(8192))
 
+  # check operation
   if OPERATION == 'mkdir':
     s.send('MKD ' + PATH + '\r\n')
     check_response(s.recv(8192))
@@ -92,6 +106,7 @@ def main():
     s.send('DELE ' + PATH + '\r\n')
     check_response(s.recv(8192))
   else:
+    # if ls, cp or mv
     s.send('PASV\r\n')
     response = s.recv(8192)
     check_response(response)
@@ -100,6 +115,7 @@ def main():
     IP = reduce(lambda a, b: a + '.' + b,IP_PORT.split(',')[0:4])
     PORT2 = (int(IP_PORT.split(',')[4:][0]) << 8) + int(IP_PORT.split(',')[4:][1])
     
+    # open data channel
     data = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
       data.connect((IP, PORT2))
