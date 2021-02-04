@@ -19,6 +19,8 @@ parse_args = ARG1.split('@')
 USER = parse_args[0].split(':')[0]
 if len(parse_args[0].split(':')) == 2:
   PASSWORD = parse_args[0].split(':')[1]
+else:
+  PASSWORD = ""
 split_host = parse_args[1].split(':')
 
 if len(split_host) == 1:
@@ -41,7 +43,11 @@ s.send('USER {}\r\n'.format(USER))
 while 1:
   response = s.recv(8192)
   print(response)
-  if response.find('Please specify') != -1:
+  if response.find('3') != -1:
+    break
+  elif response.find('5') != -1:
+    print('Error loging in')
+    sys.exit()
     break
 if PASSWORD:
   s.send('PASS ' + PASSWORD + '\r\n')
