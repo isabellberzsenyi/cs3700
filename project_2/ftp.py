@@ -54,7 +54,7 @@ def main():
     PORT = 21
   elif len(split_host) == 2:
     HOST = split_host[0]
-    PORT = split_host[1].split('/', 1)[0]
+    PORT = int(split_host[1].split('/', 1)[0])
     PATH = split_host[1].split('/', 1)[1]
 
   # connect to control channel
