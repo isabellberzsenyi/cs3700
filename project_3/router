@@ -158,6 +158,7 @@ class Router:
             if self.sockets[sock] == conn:
               srcif = sock
           msg = json.loads(k)
+          print(msg)
           if not self.handle_packet(srcif, msg):
             self.send_error(conn, msg)
         else:
@@ -165,6 +166,7 @@ class Router:
 
 if __name__ == "__main__":
   PARSER = argparse.ArgumentParser(description='route packets')
+  PARSER.add_argument('asn', metavar='asn', type=int)
   PARSER.add_argument('networks', metavar='networks', type=str, nargs='+', help="networks")
   ARGS = PARSER.parse_args()
   Router(ARGS.networks).run()
