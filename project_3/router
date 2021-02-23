@@ -120,7 +120,7 @@ class Router:
       # Final check: enforce peering relationships
       routes = self.filter_relationships(srcif, routes)
     return self.sockets[peer] if peer else None
-
+  
   def forward(self, srcif, packet):
     """ Forward a data packet """
     # TODO
@@ -136,14 +136,14 @@ class Router:
       handle update packets
 
       srcif: the port associated with the src of this message
-      packet: the msg field of the recieved message
+      packet: the received message
 
       return type: TBD
     """
     packet_msg = packet[MESG]
     # extract the packet info (network, netmask, etc ...)
     # save the network, netmask, and peer in some data structure
-    self.routing_table.append(ForwardingTableEntry(packet[SRCE],srcif, packet_msg[NMSK],packet_msg[NTWK]))
+    self.routing_table.append(ForwardingTableEntry(packet[SRCE],srcif, packet_msg[NTWK],packet_msg[NMSK]))
     for address in self.sockets.keys():
       if address != packet[SRCE]:
         try: 
@@ -158,8 +158,30 @@ class Router:
     return True
 
   def dump(self, packet):
-    """ handles dump table requests """
-    # TODO
+    """ 
+      handles dump table requests 
+      
+      packet: the received dump message
+
+      return type: TBD
+    """
+    # create response extracting info from packet
+    response = {
+      "src": packet[DEST],
+      "dst": packet[SRCE],
+      "type": TABL,
+      "msg": []
+    }
+
+    # put each entry from the forwarding table in the response
+    for entry in self.routing_table:
+      entry_resp = {
+        "network": entry.network,
+        "netmask": entry.netmask,
+        "peer": entry.srcif
+      }
+      response["msg"].append(entry_resp)
+    self.forward(packet[SRCE], json.dumps(response))
     return True
 
   def handle_packet(self, srcif, packet):
@@ -167,7 +189,8 @@ class Router:
     if packet[TYPE] == UPDT:
         self.update(srcif, packet)
         self.updates.append(packet)
-    elif packet[TYPE] == DATA:
+    elif packet[TYPE] == DUMP:
+        self.dump(packet)
         pass
 
     # TODO
