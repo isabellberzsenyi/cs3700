@@ -40,19 +40,19 @@ PROV = "prov"
 
 class ForwardingTableEntry:
     """ 
-        A single entry in a forwarding table
-        Implemented as a class largely to encapsulate print functionality
+      A single entry in a forwarding table
+      Implemented as a class largely to encapsulate print functionality
     """   
-    def __init__(self, src, srcif, network, netmask):
-        self.src = src
-        self.srcif = srcif
-        self.netmask = netmask
-        self.network = network
+  def __init__(self, src, srcif, network, netmask):
+    self.src = src
+    self.srcif = srcif
+    self.netmask = netmask
+    self.network = network
 
 class Router:
     """ Your Router """
   def __init__(self, networks):
-      self.routes = {}
+    self.routes = {}
     self.updates = []
     self.routing_table = []
     self.relations = {}
@@ -70,36 +70,37 @@ class Router:
     # TODO
     outroutes = []
     return outroutes
-def get_shortest_as_path(self, routes):
+
+  def get_shortest_as_path(self, routes):
     """ select the route with the shortest AS Path """
     # TODO
     outroutes = []
     return outroutes
 
-def get_highest_preference(self, routes):
+  def get_highest_preference(self, routes):
     """ select the route with the shortest AS Path """
     # TODO
     outroutes = []
     return outroutes
 
-def get_self_origin(self, routes):
+  def get_self_origin(self, routes):
     """ select self originating routes """
     # TODO
     outroutes = []
     return outroutes
 
-def get_origin_routes(self, routes):
+  def get_origin_routes(self, routes):
     """ select origin routes: EGP > IGP > UNK """
     # TODO
     outroutes = []
     return outroutes
 
-def filter_relationships(self, srcif, routes):
+  def filter_relationships(self, srcif, routes):
     """ Don't allow Peer->Peer, Peer->Prov, or Prov->Peer forwards """
     outroutes = []
     return outroutes
 
-def get_route(self, srcif, daddr):
+  def get_route(self, srcif, daddr):
     """ Select the best route for a given address """
     # TODO
     peer = None
@@ -120,53 +121,48 @@ def get_route(self, srcif, daddr):
       routes = self.filter_relationships(srcif, routes)
     return self.sockets[peer] if peer else None
 
-def forward(self, srcif, packet):
+  def forward(self, srcif, packet):
     """ Forward a data packet """
     # TODO
     return False
 
-def coalesce(self):
+  def coalesce(self):
     """ coalesce any routes that are right next to each other """
     # TODO (this is the most difficult task, save until last)
     return False
 
-def update(self, srcif, packet):
+  def update(self, srcif, packet):
     """ 
-        handle update packets
+      handle update packets
 
-        srcif: the port associated with the src of this message
-        packet: the msg field of the recieved message
+      srcif: the port associated with the src of this message
+      packet: the msg field of the recieved message
 
-        return type: TBD
+      return type: TBD
     """
     packet_msg = packet[MESG]
     # extract the packet info (network, netmask, etc ...)
     # save the network, netmask, and peer in some data structure
-    self.routing_table.append(
-            ForwardingTableEntry(packet[SRCE],
-                srcif, packet_msg[NMSK],
-                packet_msg[NTWK]))
-
-            for address in self.sockets.keys():
-                if address != packet[SRCE]:
-                    try: 
-                        self.sockets[address].send(packet)
-            except:
-                return False
-
+    self.routing_table.append(ForwardingTableEntry(packet[SRCE],srcif, packet_msg[NMSK],packet_msg[NTWK]))
+      for address in self.sockets.keys():
+        if address != packet[SRCE]:
+          try: 
+            self.sockets[address].send(packet)
+          except:
+            return False
     return True
 
-def revoke(self, packet):
+  def revoke(self, packet):
     """ handle revoke packets """
     # TODO
     return True
 
-def dump(self, packet):
+  def dump(self, packet):
     """ handles dump table requests """
     # TODO
     return True
 
-def handle_packet(self, srcif, packet):
+  def handle_packet(self, srcif, packet):
     """ dispatches a packet """
     if packet[TYPE] == UPDT:
         self.update(srcif, packet)
@@ -177,36 +173,35 @@ def handle_packet(self, srcif, packet):
     # TODO
     return False
 
-def send_error(self, conn, msg):
+  def send_error(self, conn, msg):
     """ Send a no_route error message """
     # TODO
     return
 
 
-def run(self):
+  def run(self):
     """ main loop for the router """
     while True:
-        socks = select.select(self.sockets.values(), [], [], 0.1)[0]
+      socks = select.select(self.sockets.values(), [], [], 0.1)[0]
       for conn in socks:
-          try:
-              k = conn.recv(65535)
+        try:
+          k = conn.recv(65535)
         except:
-            # either died on a connection reset, or was SIGTERM's by parent
+          # either died on a connection reset, or was SIGTERM's by parent
           return
-      if k:
+        if k:
           for sock in self.sockets:
-              if self.sockets[sock] == conn:
-                  srcif = sock
+            if self.sockets[sock] == conn:
+              srcif = sock
           msg = json.loads(k)
-
           print(msg)
           if not self.handle_packet(srcif, msg):
-              self.send_error(conn, msg)
+            self.send_error(conn, msg)
         else:
-            return
+          return
 
 if __name__ == "__main__":
-    PARSER = argparse.ArgumentParser(description='route packets')
+  PARSER = argparse.ArgumentParser(description='route packets')
   PARSER.add_argument('asn', metavar='asn', type=int)
   PARSER.add_argument('networks', metavar='networks', type=str, nargs='+', help="networks")
   ARGS = PARSER.parse_args()
