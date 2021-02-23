@@ -120,10 +120,45 @@ class Router:
       # Final check: enforce peering relationships
       routes = self.filter_relationships(srcif, routes)
     return self.sockets[peer] if peer else None
-  
+
+  def apply_netmask(self, ip, netmask):
+    """
+      
+    """
+    #def to_binary(base):
+    #  return list(map(lambda x: bin(int(x)), base.split(".")))
+    def pairwise_and(pair):
+      #temp = int(pair[0]) & int(pair[1])
+      #print(str(pair) + " AND " + str(temp))
+      return int(pair[0]) & int(pair[1])
+
+    #ip_bin = to_binary(ip)
+    #netmask_bin = to_binary(netmask)
+    #print("ip: " + ip + "bin: " + str(list(ip_bin)))
+    #print("netmask: " + netmask + "bin: " + str(list(netmask_bin)))
+    #print("TEST " + pairwise_and([ip_bin[0], netmask_bin[0]]))
+    #return map(pairwise_and, zip(ip_bin, netmask_bin))
+    return list(map(pairwise_and, zip(ip.split("."), netmask.split("."))))
+
   def forward(self, srcif, packet):
-    """ Forward a data packet """
-    # TODO
+    """ 
+       Forward a data packet
+      
+    """
+    # apply netmask to dest ip and check if it matches it with network
+    print('forward')
+    for entry in self.routing_table:
+      applied_mask = ".".join(list(map(str, self.apply_netmask(packet[DEST], entry.netmask))))
+#      network_bin = list(map(lambda x: int(x), entry.network.split(".")))
+#      print("mask: " + applied_mask + " net :" + entry.network)
+      if applied_mask == entry.network:
+        data = json.dumps(packet).encode('utf-8')
+        self.sockets[entry.srcif].send(data)   
+      """"
+      print('mask ' + packet[DEST] + ' & ' + entry.netmask)
+      for x in applied_mask:
+        print(str(x))
+      """
     return False
 
   def coalesce(self):
@@ -141,13 +176,17 @@ class Router:
       return type: TBD
     """
     packet_msg = packet[MESG]
+    #packet[DEST] = packet[SRCE]
+    #packet[SRCE] = "192.168.0.1"
     # extract the packet info (network, netmask, etc ...)
     # save the network, netmask, and peer in some data structure
     self.routing_table.append(ForwardingTableEntry(packet[SRCE],srcif, packet_msg[NTWK],packet_msg[NMSK]))
+    
     for address in self.sockets.keys():
-      if address != packet[SRCE]:
-        try: 
-          self.sockets[address].send(packet)
+      if address != srcif:
+        try:
+          packet[DEST] = address
+          self.sockets[address].send(json.dumps(packet).encode('utf-8'))
         except:
           return False
     return True
@@ -181,8 +220,7 @@ class Router:
         "peer": entry.srcif
       }
       response["msg"].append(entry_resp)
-    self.forward(packet[SRCE], json.dumps(response))
-    return True
+    return json.dumps(response).encode('utf-8')
 
   def handle_packet(self, srcif, packet):
     """ dispatches a packet """
@@ -190,11 +228,14 @@ class Router:
         self.update(srcif, packet)
         self.updates.append(packet)
     elif packet[TYPE] == DUMP:
-        self.dump(packet)
+        response = self.dump(packet)
+        self.sockets[srcif].send(response)
+    elif packet[TYPE] == DATA:
+        self.forward(srcif, packet)
         pass
 
     # TODO
-    return False
+    return True
 
   def send_error(self, conn, msg):
     """ Send a no_route error message """
@@ -217,8 +258,8 @@ class Router:
             if self.sockets[sock] == conn:
               srcif = sock
           msg = json.loads(k)
-          print(msg)
           if not self.handle_packet(srcif, msg):
+            print('error' + str(msg))
             self.send_error(conn, msg)
         else:
           return
