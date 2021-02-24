@@ -52,9 +52,8 @@ class ForwardingTableEntry:
 class Router:
   """ Your Router """
   def __init__(self, networks):
-    self.routes = {}
+    self.routes = []
     self.updates = []
-    self.routing_table = []
     self.relations = {}
     self.sockets = {}
 
@@ -123,42 +122,35 @@ class Router:
 
   def apply_netmask(self, ip, netmask):
     """
-      
+        
     """
-    #def to_binary(base):
-    #  return list(map(lambda x: bin(int(x)), base.split(".")))
     def pairwise_and(pair):
-      #temp = int(pair[0]) & int(pair[1])
-      #print(str(pair) + " AND " + str(temp))
       return int(pair[0]) & int(pair[1])
-
-    #ip_bin = to_binary(ip)
-    #netmask_bin = to_binary(netmask)
-    #print("ip: " + ip + "bin: " + str(list(ip_bin)))
-    #print("netmask: " + netmask + "bin: " + str(list(netmask_bin)))
-    #print("TEST " + pairwise_and([ip_bin[0], netmask_bin[0]]))
-    #return map(pairwise_and, zip(ip_bin, netmask_bin))
-    return list(map(pairwise_and, zip(ip.split("."), netmask.split("."))))
+    
+    ip_masked = map(lambda x: str(pairwise_and(x)), zip(ip.split("."), netmask.split(".")))
+    return ".".join(list(ip_masked))
 
   def forward(self, srcif, packet):
     """ 
        Forward a data packet
-      
+     
+       srcif: source interface, port associated with the src 
+       packet: received packet
+
+       return type: boolean 
     """
-    # apply netmask to dest ip and check if it matches it with network
-    print('forward')
-    for entry in self.routing_table:
-      applied_mask = ".".join(list(map(str, self.apply_netmask(packet[DEST], entry.netmask))))
-#      network_bin = list(map(lambda x: int(x), entry.network.split(".")))
-#      print("mask: " + applied_mask + " net :" + entry.network)
+    # apply netmask to dest ip and check if it matches it with 
+    # any of the networks
+    for entry in self.routes:
+      applied_mask = self.apply_netmask(packet[DEST], entry.netmask)
       if applied_mask == entry.network:
-        data = json.dumps(packet).encode('utf-8')
-        self.sockets[entry.srcif].send(data)   
-      """"
-      print('mask ' + packet[DEST] + ' & ' + entry.netmask)
-      for x in applied_mask:
-        print(str(x))
-      """
+        try:
+          data = json.dumps(packet).encode('utf-8')
+          self.sockets[entry.srcif].send(data)
+          return True
+        except:
+          return False
+   
     return False
 
   def coalesce(self):
@@ -168,24 +160,26 @@ class Router:
 
   def update(self, srcif, packet):
     """ 
-      handle update packets
+      Handle update packets
 
       srcif: the port associated with the src of this message
       packet: the received message
 
-      return type: TBD
+      return type: boolean
     """
     packet_msg = packet[MESG]
-    #packet[DEST] = packet[SRCE]
-    #packet[SRCE] = "192.168.0.1"
-    # extract the packet info (network, netmask, etc ...)
+    # extract the packet info (network, netmask, etc ...) and
     # save the network, netmask, and peer in some data structure
-    self.routing_table.append(ForwardingTableEntry(packet[SRCE],srcif, packet_msg[NTWK],packet_msg[NMSK]))
+    self.routes.append(ForwardingTableEntry(packet[SRCE],srcif, packet_msg[NTWK],packet_msg[NMSK]))
     
+    # traverse the sockets and send the update announcement to 
+    # all neighbors
     for address in self.sockets.keys():
       if address != srcif:
         try:
           packet[DEST] = address
+          packet[SRCE] = address
+          packet[SRCE][len(address) - 1] = 1
           self.sockets[address].send(json.dumps(packet).encode('utf-8'))
         except:
           return False
@@ -198,11 +192,11 @@ class Router:
 
   def dump(self, packet):
     """ 
-      handles dump table requests 
+      Handles dump table requests 
       
       packet: the received dump message
 
-      return type: TBD
+      return type: JSON containing table message
     """
     # create response extracting info from packet
     response = {
@@ -213,17 +207,25 @@ class Router:
     }
 
     # put each entry from the forwarding table in the response
-    for entry in self.routing_table:
+    for entry in self.routes:
       entry_resp = {
         "network": entry.network,
         "netmask": entry.netmask,
         "peer": entry.srcif
       }
       response["msg"].append(entry_resp)
+
     return json.dumps(response).encode('utf-8')
 
   def handle_packet(self, srcif, packet):
-    """ dispatches a packet """
+    """
+      Dispatches a packet to proper method
+    
+      srcif: source interface, port associated with the src
+      packet: the received message
+     
+      return type: boolean
+    """
     if packet[TYPE] == UPDT:
         self.update(srcif, packet)
         self.updates.append(packet)
@@ -232,9 +234,8 @@ class Router:
         self.sockets[srcif].send(response)
     elif packet[TYPE] == DATA:
         self.forward(srcif, packet)
-        pass
-
-    # TODO
+    else:
+      return False
     return True
 
   def send_error(self, conn, msg):
@@ -259,7 +260,6 @@ class Router:
               srcif = sock
           msg = json.loads(k)
           if not self.handle_packet(srcif, msg):
-            print('error' + str(msg))
             self.send_error(conn, msg)
         else:
           return
