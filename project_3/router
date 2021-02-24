@@ -51,7 +51,8 @@ class ForwardingTableEntry:
 
 class Router:
   """ Your Router """
-  def __init__(self, networks):
+  def __init__(self, networks, asn):
+    self.asn = asn
     self.routes = []
     self.updates = []
     self.relations = {}
@@ -149,6 +150,7 @@ class Router:
           self.sockets[entry.srcif].send(data)
           return True
         except:
+          print('fail', entry.srcif)
           return False
    
     return False
@@ -178,10 +180,15 @@ class Router:
       if address != srcif:
         try:
           packet[DEST] = address
-          packet[SRCE] = address
-          packet[SRCE][len(address) - 1] = 1
+          packet[SRCE] = address[:len(address) - 1] + "1"
+          print([self.asn] + packet_msg[APTH])
+          #packet_msg[APTH] = packet_msg[APTH].insert(0, self.asn)
+          packet[MESG][APTH]= packet_msg[APTH] + [self.asn]
+          #print("sending to", address, "packet ", packet)
+          print("address", address, "srcif", srcif)
           self.sockets[address].send(json.dumps(packet).encode('utf-8'))
         except:
+          print("F")
           return False
     return True
 
@@ -214,7 +221,6 @@ class Router:
         "peer": entry.srcif
       }
       response["msg"].append(entry_resp)
-
     return json.dumps(response).encode('utf-8')
 
   def handle_packet(self, srcif, packet):
@@ -259,6 +265,7 @@ class Router:
             if self.sockets[sock] == conn:
               srcif = sock
           msg = json.loads(k)
+          print(msg)
           if not self.handle_packet(srcif, msg):
             self.send_error(conn, msg)
         else:
@@ -269,4 +276,4 @@ if __name__ == "__main__":
   PARSER.add_argument('asn', metavar='asn', type=int)
   PARSER.add_argument('networks', metavar='networks', type=str, nargs='+', help="networks")
   ARGS = PARSER.parse_args()
-  Router(ARGS.networks).run()
+  Router(ARGS.networks, ARGS.asn).run()
