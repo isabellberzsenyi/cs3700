@@ -123,7 +123,12 @@ class Router:
 
   def apply_netmask(self, ip, netmask):
     """
-        
+      Apply netmask to the ip address
+
+      ip: ip address
+      netmask: netmask associated to a network
+
+      return: masked ip address
     """
     def pairwise_and(pair):
       return int(pair[0]) & int(pair[1])
@@ -150,9 +155,8 @@ class Router:
           self.sockets[entry.srcif].send(data)
           return True
         except:
-          print('fail', entry.srcif)
           return False
-   
+  
     return False
 
   def coalesce(self):
@@ -179,16 +183,17 @@ class Router:
     for address in self.sockets.keys():
       if address != srcif:
         try:
+          # update the destination with the address
           packet[DEST] = address
+          # update the source with our router's port address
           packet[SRCE] = address[:len(address) - 1] + "1"
-          print([self.asn] + packet_msg[APTH])
-          #packet_msg[APTH] = packet_msg[APTH].insert(0, self.asn)
-          packet[MESG][APTH]= packet_msg[APTH] + [self.asn]
-          #print("sending to", address, "packet ", packet)
-          print("address", address, "srcif", srcif)
+          # if our router is not in the AS Path
+          # append it to the AS Path in the announcement
+          if self.asn not in packet_msg[APTH]:
+            packet[MESG][APTH]= packet_msg[APTH] + [self.asn]
+
           self.sockets[address].send(json.dumps(packet).encode('utf-8'))
         except:
-          print("F")
           return False
     return True
 
@@ -265,7 +270,7 @@ class Router:
             if self.sockets[sock] == conn:
               srcif = sock
           msg = json.loads(k)
-          print(msg)
+          
           if not self.handle_packet(srcif, msg):
             self.send_error(conn, msg)
         else:
