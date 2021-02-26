@@ -43,11 +43,15 @@ class ForwardingTableEntry:
       A single entry in a forwarding table
       Implemented as a class largely to encapsulate print functionality
   """   
-  def __init__(self, src, srcif, network, netmask):  
+  def __init__(self, src, srcif, network, netmask, localpref, selfOrigin, ASPath, origin):  
     self.src = src
     self.srcif = srcif
     self.netmask = netmask
     self.network = network
+    self.localpref = localpref
+    self.selfOrigin = selfOrigin
+    self.ASPath = ASPath
+    self.origin = origin
 
 class Router:
   """ Your Router """
@@ -149,6 +153,8 @@ class Router:
     # any of the networks
     for entry in self.routes:
       applied_mask = self.apply_netmask(packet[DEST], entry.netmask)
+      # want to keep track if there are multiple options that match
+      # go through the 5 filtering then send 
       if applied_mask == entry.network:
         try:
           data = json.dumps(packet).encode('utf-8')
@@ -176,7 +182,7 @@ class Router:
     packet_msg = packet[MESG]
     # extract the packet info (network, netmask, etc ...) and
     # save the network, netmask, and peer in some data structure
-    self.routes.append(ForwardingTableEntry(packet[SRCE],srcif, packet_msg[NTWK],packet_msg[NMSK]))
+    self.routes.append(ForwardingTableEntry(packet[SRCE],srcif, packet_msg[NTWK],packet_msg[NMSK], packet_msg[LPRF], packet_msg[SORG], packet_msg[APTH], packet_msg[ORIG]))
     
     # traverse the sockets and send the update announcement to 
     # all neighbors
