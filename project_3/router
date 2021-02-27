@@ -108,6 +108,35 @@ class Router:
     outroutes = []
     return outroutes
 
+  def forwardUpdatesOrRevoke(self, srcif, packet):
+    def sendToGroups(srcif, packet, allowedGroups):
+      packet_msg = packet[MESG]
+      for address in self.sockets.keys():
+        if address != srcif and self.relations[address] in allowedGroups:
+          try:
+            # update the destination with the address
+            packet[DEST] = address
+            # update the source with our router's port address
+            packet[SRCE] = address[:len(address) - 1] + "1"
+            # if our router is not in the AS Path
+            # append it to the AS Path in the announcement
+            if packet[TYPE] == UPDT:
+              if self.asn not in packet_msg[APTH]:
+                packet[MESG][APTH]= packet_msg[APTH] + [self.asn]
+
+            self.sockets[address].send(json.dumps(packet).encode('utf-8'))
+          except:
+            return False
+      return True
+
+    relationship = self.relations[srcif]
+    if relationship == CUST:
+      sendToGroups(srcif, packet, [CUST, PEER, PROV])
+    else: 
+      sendToGroups(srcif, packet, [CUST])
+
+   
+
   def get_route(self, srcif, daddr):
     """ Select the best route for a given address """
     # TODO
@@ -226,6 +255,7 @@ class Router:
     
     # traverse the sockets and send the update announcement to 
     # all neighbors
+<<<<<<< Updated upstream
     for address in self.sockets.keys():
       if address != srcif:
         try:
@@ -242,6 +272,9 @@ class Router:
         except:
           return False
     return True
+=======
+    return self.forwardUpdatesOrRevoke(srcif, packet)
+>>>>>>> Stashed changes
 
   def revoke(self,srcif, packet):
     """ handle revoke packets """
