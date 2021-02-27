@@ -118,7 +118,7 @@ class Router:
             # update the destination with the address
             packet[DEST] = address
             # update the source with our router's port address
-            packet[SRCE] = address[:len(address) - 1] + "1"
+            packet[SRCE] = address[:-1] + "1"
             # if our router is not in the AS Path
             # append it to the AS Path in the announcement
             if packet[TYPE] == UPDT:
