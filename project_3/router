@@ -187,7 +187,9 @@ class Router:
 
       return max(current, new, key= lambda x: origin_map[x.origin])
 
-    if current.localpref != new.localpref:
+    if current.netmask != new.netmask:
+      return max(current, new, key= lambda x: x.netmask)  
+    elif current.localpref != new.localpref:
       return max(current, new, key= lambda x: x.localpref)
     elif current.selfOrigin != new.selfOrigin:
       if current.selfOrigin:
