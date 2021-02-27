@@ -4,6 +4,7 @@
 import argparse
 import json
 import select
+import functools
 import socket
 
 ##########################################################################################
@@ -51,6 +52,9 @@ class ForwardingTableEntry:
     self.selfOrigin = selfOrigin
     self.ASPath = ASPath
     self.origin = origin
+
+  def __str__(self):
+      return f'srcif:{self.srcif} netmask: {self.netmask}, network: {self.network}'
 
 class Router:
   """ Your Router """
@@ -140,12 +144,16 @@ class Router:
     return ".".join(list(ip_masked))
 
   def best_path(self, current, new):
+    if current is None:
+      return new
+
     def best_origin(current, new):
       origin_map = {
         "IGP": 3,
         "EGP": 2,
         "UNK": 1
       }
+
       return max(current, new, key= lambda x: origin_map[x.origin])
 
     if current.localpref != new.localpref:
@@ -171,18 +179,9 @@ class Router:
 
        return type: boolean 
     """
-    current_best = None
-    # apply netmask to dest ip and check if it matches it with 
-    # any of the networks
-    for entry in self.routes:
-      applied_mask = self.apply_netmask(packet[DEST], entry.netmask)
-      # want to keep track if there are multiple options that match
-      # go through the 5 filtering then send 
-      if applied_mask == entry.network:
-        if current_best is None:
-          current_best = entry
-        else:
-          current_best = self.best_path(current_best, entry)
+    filtered_routes = [entry for entry in self.routes if self.apply_netmask(packet[DEST], entry.netmask) == entry.network]
+    current_best = functools.reduce(self.best_path, filtered_routes, None)
+
     if current_best is not None:
       try:
         data = json.dumps(packet).encode('utf-8')
@@ -193,11 +192,13 @@ class Router:
     else:
       # no route
       no_route = {
-        "src": self.sockets[srcif].gethostname(),
-        "dst": packet[SRCE][:len(packet[SRCE]) - 1] + "1",
+        # TODO 
+        "src": srcif[:-1] + "1",
+        "dst": packet[SRCE],
         "type": NRTE,
         "msg": {}
       }
+      
       self.send_error(self.sockets[srcif], no_route)
   
     return False
@@ -219,6 +220,7 @@ class Router:
     packet_msg = packet[MESG]
     # extract the packet info (network, netmask, etc ...) and
     # save the network, netmask, and peer in some data structure
+    # TODO this doesn't actually update anything, it just appends - we should find a way to replace forwarding table entries
     self.routes.append(ForwardingTableEntry(srcif, packet_msg[NTWK], packet_msg[NMSK], packet_msg[LPRF], packet_msg[SORG], packet_msg[APTH], packet_msg[ORIG]))
     
     # traverse the sockets and send the update announcement to 
@@ -229,7 +231,7 @@ class Router:
           # update the destination with the address
           packet[DEST] = address
           # update the source with our router's port address
-          packet[SRCE] = address[:len(address) - 1] + "1"
+          packet[SRCE] = address[:-1] + "1"
           # if our router is not in the AS Path
           # append it to the AS Path in the announcement
           if self.asn not in packet_msg[APTH]:
@@ -240,9 +242,34 @@ class Router:
           return False
     return True
 
-  def revoke(self, packet):
+  def revoke(self,srcif, packet):
     """ handle revoke packets """
     # TODO
+    routesToRevoke = packet[MESG]
+    for fte in self.routes:
+        print(str(fte))
+
+    for routeRevokeMsg in routesToRevoke:
+      print(routeRevokeMsg)
+      self.routes = filter(lambda entry: entry.srcif != packet[SRCE] or entry.netmask != routeRevokeMsg[NMSK] or entry.network != routeRevokeMsg[NTWK], self.routes)
+ 
+    for fte in self.routes:
+        print(str(fte))
+    
+    for address in self.sockets.keys():
+      if address != srcif:
+        try:
+          # update the destination with the address
+          packet[DEST] = address
+          # update the source with our router's port address
+          packet[SRCE] = address[:-1] + "1"
+          print(packet)
+          # if our router is not in the AS Path
+          # append it to the AS Path in the announcement
+
+          self.sockets[address].send(json.dumps(packet).encode('utf-8'))
+        except:
+          return False
     return True
 
   def dump(self, packet):
@@ -288,6 +315,9 @@ class Router:
         self.sockets[srcif].send(response)
     elif packet[TYPE] == DATA:
         self.forward(srcif, packet)
+    elif packet[TYPE] == RVKE:
+        self.revoke(srcif, packet)
+        self.updates.append(packet)
     else:
       return False
     return True
@@ -295,7 +325,7 @@ class Router:
   def send_error(self, conn, msg):
     """ Send a no_route error message """
     # TODO
-    data = json.dumps(msg).encode('utf-8')
+    response = json.dumps(msg).encode('utf-8')
     conn.send(response)
     return True
 
