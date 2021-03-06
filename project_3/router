@@ -6,7 +6,6 @@ import json
 import select
 import functools
 import socket
-from pprint import pprint
 
 ##########################################################################################
 
@@ -40,6 +39,54 @@ PROV = "prov"
 
 ##########################################################################################
 
+def apply_netmask(ip, netmask):
+  """
+    Apply netmask to the ip address
+
+    ip: ip address
+    netmask: netmask associated to a network
+
+    return: masked ip address
+  """
+  def pairwise_and(pair):
+    return int(pair[0]) & int(pair[1])
+    
+  ip_masked = map(lambda x: str(pairwise_and(x)), zip(ip.split("."), netmask.split(".")))
+
+  return ".".join(list(ip_masked))
+
+def sub1_netmask(netmask):
+  ip_to_binary = list(map(lambda x: format(int(x), 'b'), netmask.split(".")))
+  
+  count = 0
+  for x in ip_to_binary:
+    for y in range(len(x)):
+      if x[y] == '1':
+        count += 1
+  count = count - 1
+
+  bin_to_ip = []
+  build_ip = ''
+  while count >= 0:
+    if len(build_ip) == 8:
+      bin_to_ip.append(build_ip)
+      build_ip = ''
+    if count > 0:
+      build_ip += '1'
+    count -= 1
+
+  if len(build_ip) > 0 and len(build_ip) < 8:
+    for x in range(len(build_ip), 8):
+      build_ip += '0'
+    bin_to_ip.append(build_ip)
+  if len(bin_to_ip) < 4:
+    for x in range(len(bin_to_ip), 4):
+      bin_to_ip.append('00000000')
+
+  sub1_ip = ".".join(list(map(lambda x: str(int(x,2)), bin_to_ip)))
+  return sub1_ip
+
+
 class ForwardingTableEntry:
   """ 
       A single entry in a forwarding table
@@ -55,7 +102,27 @@ class ForwardingTableEntry:
     self.origin = origin
 
   def __str__(self):
-      return f'srcif:{self.srcif} netmask: {self.netmask}, network: {self.network}'
+    return f'srcif:{self.srcif} netmask: {self.netmask}, network: {self.network}'
+
+  def __lt__(self, other):
+    return self.network < other.network
+ 
+  def adjacent(self, other):
+    def to_CIDR(ip_array):
+      count = 0
+      for x in ip_array:
+        for y in range(len(x)):
+          if x[y] == '1':
+            count += 1
+      return count
+    
+    new_netmask = sub1_netmask(other.netmask)
+    netmask_self = apply_netmask(self.network, new_netmask)
+    netmask_other = apply_netmask(other.network, new_netmask)
+    return netmask_self == netmask_other
+
+  def __eq__(self, other):
+    return (self.srcif == other.srcif) and (self.netmask == other.netmask) and (self.localpref == other.localpref) and (self.selfOrigin == other.selfOrigin) and (self.ASPath == other.ASPath) and (self.origin == other.origin) and self.adjacent(other)
 
 class Router:
   """ Your Router """
@@ -72,42 +139,6 @@ class Router:
       self.sockets[network].setblocking(0)
       self.sockets[network].connect(network)
       self.relations[network] = relation
-
-  def lookup_routes(self, daddr):
-    """ Lookup all valid routes for an address """
-    # TODO
-    outroutes = []
-    return outroutes
-
-  def get_shortest_as_path(self, routes):
-    """ select the route with the shortest AS Path """
-    # TODO
-    outroutes = []
-    return outroutes
-
-  def get_highest_preference(self, routes):
-    """ select the route with the shortest AS Path """
-    # TODO
-    outroutes = []
-    return outroutes
-
-  def get_self_origin(self, routes):
-    """ select self originating routes """
-    # TODO
-    outroutes = []
-    return outroutes
-
-  def get_origin_routes(self, routes):
-    """ select origin routes: EGP > IGP > UNK """
-    # TODO
-    outroutes = []
-    return outroutes
-
-  def filter_relationships(self, srcif, routes):
-    
-    """ Don't allow Peer->Peer, Peer->Prov, or Prov->Peer forwards """
-    outroutes = []
-    return outroutes
 
   def forwardUpdatesOrRevoke(self, srcif, packet):
     def sendToGroups(*allowedGroups):
@@ -128,6 +159,9 @@ class Router:
             self.sockets[address].send(json.dumps(packet).encode('utf-8'))
           except:
             return False
+
+        if len(self.routes) >= 2:
+          self.coalesce()
       return True
 
     relationship = self.relations[srcif]
@@ -135,44 +169,6 @@ class Router:
       sendToGroups(CUST, PEER, PROV)
     else: 
       sendToGroups(CUST)
-
-   
-
-  def get_route(self, srcif, daddr):
-    """ Select the best route for a given address """
-    # TODO
-    peer = None
-    routes = self.lookup_routes(daddr)
-    # Rules go here
-    if routes:
-        # 1. Highest Preference
-      routes = self.get_highest_preference(routes)
-      # 2. Self Origin
-      routes = self.get_self_origin(routes)
-      # 3. Shortest ASPath
-      routes = self.get_shortest_as_path(routes)
-      # 4. EGP > IGP > UNK
-      routes = self.get_origin_routes(routes)
-      # 5. Lowest IP Address
-      # TODO
-      # Final check: enforce peering relationships
-      routes = self.filter_relationships(srcif, routes)
-    return self.sockets[peer] if peer else None
-
-  def apply_netmask(self, ip, netmask):
-    """
-      Apply netmask to the ip address
-
-      ip: ip address
-      netmask: netmask associated to a network
-
-      return: masked ip address
-    """
-    def pairwise_and(pair):
-      return int(pair[0]) & int(pair[1])
-    
-    ip_masked = map(lambda x: str(pairwise_and(x)), zip(ip.split("."), netmask.split(".")))
-    return ".".join(list(ip_masked))
 
   def best_path(self, current, new):
     if current is None:
@@ -184,7 +180,6 @@ class Router:
         "EGP": 2,
         "UNK": 1
       }
-
       return max(current, new, key= lambda x: origin_map[x.origin])
 
     if current.netmask != new.netmask:
@@ -213,7 +208,7 @@ class Router:
 
        return type: boolean 
     """
-    filtered_routes = [entry for entry in self.routes if self.apply_netmask(packet[DEST], entry.netmask) == entry.network]
+    filtered_routes = [entry for entry in self.routes if apply_netmask(packet[DEST], entry.netmask) == entry.network]
     filter_customers = [entry for entry in filtered_routes if self.relations[entry.srcif] == CUST or self.relations[srcif] == CUST]
     current_best = functools.reduce(self.best_path, filter_customers, None)
 
@@ -227,7 +222,6 @@ class Router:
     else:
       # no route
       no_route = {
-        # TODO 
         "src": srcif[:-1] + "1",
         "dst": packet[SRCE],
         "type": NRTE,
@@ -235,12 +229,25 @@ class Router:
       }
       
       self.send_error(self.sockets[srcif], no_route)
-  
     return False
 
   def coalesce(self):
     """ coalesce any routes that are right next to each other """
-    # TODO (this is the most difficult task, save until last)
+    self.routes.sort()
+  
+    discard_routes = []
+    idx = 0
+
+    while idx <  len(self.routes) - 1:
+      if self.routes[idx] == self.routes[idx+1]:
+        discard_routes.append(self.routes[idx + 1])
+        self.routes[idx].netmask = sub1_netmask(self.routes[idx].netmask)
+        idx += 1
+      idx += 1
+    
+    for route in discard_routes:
+      self.routes.remove(route)
+
     return False
 
   def update(self, srcif, packet):
@@ -255,18 +262,29 @@ class Router:
     packet_msg = packet[MESG]
     # extract the packet info (network, netmask, etc ...) and
     # save the network, netmask, and peer in some data structure
-    # TODO this doesn't actually update anything, it just appends - we should find a way to replace forwarding table entries
     self.routes.append(ForwardingTableEntry(srcif, packet_msg[NTWK], packet_msg[NMSK], packet_msg[LPRF], packet_msg[SORG], packet_msg[APTH], packet_msg[ORIG]))
     
     # traverse the sockets and send the update announcement to 
     # all neighbors
     return self.forwardUpdatesOrRevoke(srcif, packet)
 
-  def revoke(self,srcif, packet):
+  def disaggregate(self):
+    # throw out the routing table
+    self.routes = []
+    # go through each update
+    for update in self.updates:
+      packet = update[1]
+      packet_msg = packet[MESG]
+      if packet[TYPE] == UPDT:
+        self.routes.append(ForwardingTableEntry(update[0], packet_msg[NTWK], packet_msg[NMSK], packet_msg[LPRF], packet_msg[SORG], packet_msg[APTH], packet_msg[ORIG]))
+      else:
+        routesToRevoke = packet[MESG]
+        for routeRevokeMsg in routesToRevoke:
+          self.routes = list(filter(lambda entry: entry.srcif != update[0] or entry.netmask != routeRevokeMsg[NMSK] or entry.network != routeRevokeMsg[NTWK], self.routes))
+
+  def revoke(self, srcif, packet):
     """ handle revoke packets """
-    routesToRevoke = packet[MESG]
-    for routeRevokeMsg in routesToRevoke:
-       self.routes = list(filter(lambda entry: entry.srcif != packet[SRCE] or entry.netmask != routeRevokeMsg[NMSK] or entry.network != routeRevokeMsg[NTWK], self.routes))
+    self.disaggregate()
 
     return self.forwardUpdatesOrRevoke(srcif, packet)  
 
@@ -305,24 +323,26 @@ class Router:
      
       return type: boolean
     """
+    def append_update(srcif, packet):
+      self.updates.append((srcif, packet))
+
     if packet[TYPE] == UPDT:
-        self.update(srcif, packet)
-        self.updates.append(packet)
+      append_update(srcif, packet)
+      self.update(srcif, packet)
     elif packet[TYPE] == DUMP:
-        response = self.dump(packet)
-        self.sockets[srcif].send(response)
+      response = self.dump(packet)
+      self.sockets[srcif].send(response)
     elif packet[TYPE] == DATA:
-        self.forward(srcif, packet)
+      self.forward(srcif, packet)
     elif packet[TYPE] == RVKE:
-        self.revoke(srcif, packet)
-        self.updates.append(packet)
+      append_update(srcif, packet)
+      self.revoke(srcif, packet)
     else:
       return False
     return True
 
   def send_error(self, conn, msg):
     """ Send a no_route error message """
-    # TODO
     response = json.dumps(msg).encode('utf-8')
     conn.send(response)
     return True
