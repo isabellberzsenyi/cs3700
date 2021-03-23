@@ -1,0 +1,76 @@
+#!/usr/bin/python -u
+#
+# CS3700, Spring 2015
+# Project 2 Starter Code
+#
+
+import sys
+import socket
+import time
+import datetime
+import select
+import json
+
+def log(string):
+  sys.stderr.write(datetime.datetime.now().strftime("%H:%M:%S.%f") + " " + string + "\n")
+
+ADV_WND = 3000
+MSG_SIZE = 1500
+TIMEOUT = 30
+
+LAST_ACK = 0
+
+# Bind to localhost and an ephemeral port
+UDP_IP = "127.0.0.1"
+UDP_PORT = int(sys.argv[1])
+
+# Set up the socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+sock.bind((UDP_IP, UDP_PORT))
+sock.settimeout(TIMEOUT)
+
+# Get port we bound to
+UDP_PORT = sock.getsockname()[1]
+log("[bound] " + str(UDP_PORT))
+
+# Now listen for packets
+while True:
+  result = sock.recvfrom(MSG_SIZE)
+  # If nothing is ready, we hit the timeout
+  if result:
+    (data, addr) = result
+    
+    try:
+      decoded = json.loads(data)
+      if 'timestamp' in decoded and (decoded['timestamp']):
+        msg = json.dumps({"timestamp": datetime.datetime.now().strftime("%m%d%Y, %H:%M:%S.%f")})
+        sock.sendto(msg, addr)
+        continue
+
+      if (decoded['eof']):
+        log("[completed]")    
+        sys.exit(0)
+        
+      if (decoded['data']):
+        
+        if LAST_ACK == decoded['sequence']:
+          sys.stdout.write(decoded['data'])
+          # Send back an ack to the sender
+          msg = json.dumps({"ack": decoded['sequence'] + len(decoded['data'])})
+
+          if sock.sendto(msg, addr) < len(msg):
+            log("[error] unable to fully send packet")
+            
+          LAST_ACK = decoded['sequence'] + len(decoded['data'])
+        elif LAST_ACK < decoded['sequence']:
+          # Out of order send back last ack
+          msg = json.dumps({"ack": LAST_ACK})
+
+          if sock.sendto(msg, addr) < len(msg):
+            log("[error] unable to fully send packet") 
+    except (ValueError, KeyError, TypeError) as e:
+      log("[recv corrupt packet]")
+      raise e
+  else:
+    log("[error] timeout")
+    sys.exit(-1)

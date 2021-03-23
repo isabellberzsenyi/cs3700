@@ -1,0 +1,113 @@
+#!/usr/bin/python -u
+#
+# CS3700, Spring 2015
+# Project 2 Starter Code
+#
+
+import sys
+import socket
+import time
+import datetime
+import select
+import json
+
+ADV_WND = 5000
+MSG_SIZE = 1500
+
+DATA_SIZE = 500
+TIMEOUT = .5
+SEQUENCE = 0
+
+LAST_ACK = 0
+msgs_sent = []
+dupe_ack_count = 0
+timeout_count = 0
+
+# Bind to localhost and an ephemeral port
+IP_PORT = sys.argv[1]
+UDP_IP = IP_PORT[0:IP_PORT.find(":")]
+UDP_PORT = int(IP_PORT[IP_PORT.find(":")+1:])
+dest = (UDP_IP, UDP_PORT)
+
+# Set up the socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+sock.settimeout(TIMEOUT)
+
+def log(string):
+  sys.stderr.write(datetime.datetime.now().strftime("%H:%M:%S.%f") + " " + string + "\n")
+
+
+def send_next_packet():
+  global SEQUENCE
+
+  data = sys.stdin.read(min(DATA_SIZE, ADV_WND-(SEQUENCE-LAST_ACK)))
+  if (len(data) > 0):
+    msg = json.dumps({"sequence": SEQUENCE, "data": data, "ack": False, "eof": False})
+    SEQUENCE += len(data)
+    msgs_sent.append((msg, SEQUENCE))
+
+    if sock.sendto(msg, dest) < len(msg):
+      log("[error] unable to fully send packet")
+    else:
+      log("[send data] " + str(SEQUENCE) + " (" + str(len(data)) + ")")
+    return True
+  else:
+    return False
+
+while SEQUENCE - LAST_ACK < ADV_WND:
+  if(not send_next_packet()):
+    break
+
+# Now read in data, send packets
+while True:
+  log("ABOUT TO SLEEP")
+  # But we're waiting on an ack here
+  try: 
+    result = sock.recvfrom(MSG_SIZE)
+  except socket.timeout:
+    for msg,seq in msgs_sent:
+      sock.sendto(msg, dest)
+    continue 
+  
+  log("[sender result] " + str(result))
+  if result:
+    (data, addr) = result
+
+    try:
+      decoded = json.loads(data)
+      # ack was sent back in order
+      if decoded['ack'] == msgs_sent[0][1]:
+        LAST_ACK = max(LAST_ACK, decoded['ack'])
+        msgs_sent.pop(0)
+        if(not send_next_packet()):
+          if len(msgs_sent) == 0:
+            break
+      else:
+        # Duplicate ack
+        if LAST_ACK == decoded['ack']:
+          dupe_ack_count += 1
+          if dupe_ack_count >= 3:
+            for msg,seq in msgs_sent:
+              sock.sendto(msg, dest)
+            dupe_ack_count = 0
+          else:
+            if(not send_next_packet()):
+              if len(msgs_sent) == 0:
+                break
+        else: 
+          msgs_sent = list(filter(lambda msg: msg[1] > decoded['ack'], msgs_sent))
+          LAST_ACK = max(LAST_ACK, decoded['ack'])
+
+          done_sending = False
+          while SEQUENCE - LAST_ACK < ADV_WND:
+            if(not send_next_packet()):
+              done_sending=True
+              break
+          if len(msgs_sent) == 0 and done_sending:
+            break
+    except (ValueError, KeyError, TypeError) as e:
+      log("[recv corrupt packet]")
+
+msg = json.dumps({"eof": True, "data": "", "sequence": SEQUENCE, "ack": False})
+for x in range(10):
+  sock.sendto(msg, dest)
