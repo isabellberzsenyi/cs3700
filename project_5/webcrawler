@@ -2,9 +2,10 @@
 import http
 
 def login():
-  http.GET("http://webcrawler-site.ccs.neu.edu/accounts/login/?next=/fakebook/")
-
-  return 1
+  tokens = http.GET("http://webcrawler-site.ccs.neu.edu/accounts/login/?next=/fakebook/")
+  body = "username=berzsenyi.i&password=74BMDIXZBUIK2EXD&csrfmiddlewaretoken="+tokens["csrfmiddlewaretoken"]+"&next=%2Ffakebook%2F"
+  tokens = http.POST("http://webcrawler-site.ccs.neu.edu/accounts/login/", tokens, body)
+  return tokens
+  
 if __name__ == "__main__":
-  HOST = "webcrawler-site.ccs.neu.edu"
-  login()
+  tokens = login()
