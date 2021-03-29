@@ -2,10 +2,9 @@
 import http
 
 def login():
-  data = "GET /accounts/login/?next=/fakebook/ HTTP/1.0\r\n"
-  data += "HOST: webcrawler-site.ccs.neu.edu\n\n"
+  http.GET("http://webcrawler-site.ccs.neu.edu/accounts/login/?next=/fakebook/")
 
   return 1
 if __name__ == "__main__":
   HOST = "webcrawler-site.ccs.neu.edu"
-  
+  login()
