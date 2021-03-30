@@ -1,11 +1,87 @@
 #!/usr/bin/env python3
 import http
+from html.parser import HTMLParser
+
+TARGET_DOMAIN = "http://webcrawler-site.ccs.neu.edu"
+FAKEBOOK_ROOT = "/fakebook/"
+SECRET_FLAG = "secret_flag"
+
+class LinkFetcher(HTMLParser):
+  def __init__(self):
+    super().__init__()
+    self.links = []
+    self.secret_keys = []
+    self.hasKey = False
+    self.reset()
+
+  def valid_link(self, link):
+    # Implement this later
+    return TARGET_DOMAIN in link
+
+  def handle_starttag(self, tag, attrs):
+    # find cookies in input tag
+    if tag == "a":
+      for name, link in attrs:
+        if name == 'href':
+          self.links.append(link)
+    elif tag == "h2":
+      if ('class', SECRET_FLAG) in attrs:
+        self.hasKey = True
+
+  def handle_data(self, data):
+    if self.hasKey:
+      print(f'Found key!\n {data}')
+      self.secret_keys.append(data)
+      self.hasKey = False
+
 
 def login():
-  tokens = http.GET("http://webcrawler-site.ccs.neu.edu/accounts/login/?next=/fakebook/")
-  body = "username=berzsenyi.i&password=74BMDIXZBUIK2EXD&csrfmiddlewaretoken="+tokens["csrfmiddlewaretoken"]+"&next=%2Ffakebook%2F"
-  tokens = http.POST("http://webcrawler-site.ccs.neu.edu/accounts/login/", tokens, body)
+  response = http.GET(f"{TARGET_DOMAIN}/accounts/login/?next=/fakebook/")
+  tokens = http.getCookies(response)
+  middleware_token = http.getMiddlewareToken(response)
+  body = "username=berzsenyi.i&password=74BMDIXZBUIK2EXD&csrfmiddlewaretoken="+middleware_token+"&next=%2Ffakebook%2F"
+  response = http.POST("http://webcrawler-site.ccs.neu.edu/accounts/login/", tokens, body)
+  tokens = http.getCookies(response)
+
   return tokens
   
-if __name__ == "__main__":
+
+def parsePageResponse(tokens, path):
+  response = http.GET(f"{TARGET_DOMAIN}{path}", tokens)
+
+  linkFetch = LinkFetcher()
+  linkFetch.feed(response)
+
+  return {
+    'links': linkFetch.links,
+    'secret_keys': linkFetch.secret_keys 
+  }
+
+def is_invalid(link):
+  return FAKEBOOK_ROOT not in link
+
+def crawl(tokens, init_path):
+  queue = [init_path]
+  visited = []
+  secret_keys = []
+
+  while len(queue) != 0:
+    current_path = queue.pop()
+    if current_path in visited or is_invalid(current_path):
+      continue
+    else:
+      print(current_path)
+      visited.append(current_path)
+      parsed_response = parsePageResponse(tokens, current_path)
+      secret_keys.extend(parsed_response['secret_keys'])
+      queue.extend(parsed_response['links'])
+  return secret_keys
+
+def main():
   tokens = login()
+  secret_keys=crawl(tokens, FAKEBOOK_ROOT)
+  print(secret_keys)
+  return secret_keys
+
+if __name__ == "__main__":
+  main()

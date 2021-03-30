@@ -3,7 +3,7 @@ import socket
 from urllib.parse import urlparse
 from html.parser import HTMLParser
 
-def connect_socket(hostname):
+def connectSocket(hostname):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.settimeout(30)
   
@@ -14,8 +14,7 @@ def connect_socket(hostname):
     print(e)
     return -1
   
-
-def check_response_status(response_status):
+def checkResponseStatus(response_status):
   if response_status == '200':
       print("OK")
       return 1
@@ -32,6 +31,11 @@ def check_response_status(response_status):
     print('ERROR')
     return -1
 
+def getMiddlewareToken(response):
+  p = TokenParse()
+  p.feed(response)
+  return p.csrf_middleware_token
+
 def getCookies(response):
   tokens = {}
   if 'Set-Cookie' in response:
@@ -42,24 +46,26 @@ def getCookies(response):
           tokens['csrftoken'] = x.split(";")[0].split('=')[1]
         elif 'sessionid' in x:
           tokens['sessionid'] = x.split(";")[0].split('=')[1]
+
   return tokens
 
 class TokenParse(HTMLParser):
-  def __init(self):
-    super().__init__
-    self.csrf_token = ''
+  def __init__(self):
+    super().__init__()
+    self.csrf_middleware_token = ''
     self.reset()
   def handle_starttag(self, tag, attrs):
     # find cookies in input tag
-    if tag == "input":
+    if tag == "input": 
       if ('name', 'csrfmiddlewaretoken') in attrs:
         for x, y in attrs:
           if x == 'value':
-            self.csrf_token = y
+            self.csrf_middleware_token = y
+
 
 def POST(url, tokens, body):
   parsed_url = urlparse(url)
-  s = connect_socket(parsed_url.hostname)
+  s = connectSocket(parsed_url.hostname)
   if s == -1:
     sys.exit()
   
@@ -80,26 +86,19 @@ def POST(url, tokens, body):
       if '\r\n' in response:
         break
     
-    # tokens = getCookies(response)
+    
   except socket.error as e:
     print(e)
 
   s.close()
-  response_status = response.split("\n")[0].split(" ")[1]
-  if check_response_status(response_status):
-    tokens = getCookies(response)
-    
-    return tokens
-  else:
-    return -1
-
+  return response
 
 def GET(url, tokens = ""):
   parsed_url = urlparse(url)
 
   # Should probably parse this into some useable object?? 
   # Or leave it as text idk - I'd want a library to pull the relevant info for me
-  s = connect_socket(parsed_url.hostname)
+  s = connectSocket(parsed_url.hostname)
   if s == -1:
     sys.exit()
 
@@ -126,17 +125,4 @@ def GET(url, tokens = ""):
     print(e)
   
   s.close()
-  # check the response
-  response_status = response.split("\n")[0].split(" ")[1]
-  if check_response_status(response_status):
-    tokens = getCookies(response)
-    # pull out csrfmiddlewaretoken
-    if parsed_url.path == '/accounts/login/':
-      p = TokenParse()
-      p.feed(response)
-      tokens['csrfmiddlewaretoken'] = p.csrf_token
-    return tokens
-  else:
-    return -1
-
-  
+  return response
