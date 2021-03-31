@@ -31,7 +31,6 @@ class LinkFetcher(HTMLParser):
 
   def handle_data(self, data):
     if self.hasKey:
-      # print(f'Found key!\n {data}')
       key = data.split("FLAG: ")[1]
       self.secret_keys.append(key)
       self.hasKey = False
@@ -46,11 +45,9 @@ def login(username, password):
   body = f"username={username}&password={password}&csrfmiddlewaretoken="+middleware_token+"&next=%2Ffakebook%2F"
   response = http.POST("http://webcrawler-site.ccs.neu.edu/accounts/login/", tokens, body)
   tokens = http.getCookies(response)
-  print('logged in')
   return tokens
 
 def getNewLocation(response):
-  print('get new location')
   if 'Location' in response:
     split = response.split('\n')
     for x in split:
@@ -62,7 +59,6 @@ def parsePageResponse(tokens, path):
   response = http.GET(request_path, tokens)
   response_status = response.split("\n")[0].split(" ")[1]
   while response_status != '200' and response_status != '302':  
-    print('not 200 or 302')
     if response_status == '301':
       request_path = getNewLocation(response)
     elif (response_status == '403') or (response_status == '404'):
