@@ -65,7 +65,6 @@ def parsePageResponse(tokens, path):
     print('not 200 or 302')
     if response_status == '301':
       request_path = getNewLocation(response)
-      return
     elif (response_status == '403') or (response_status == '404'):
       return
     response = http.GET(request_path, tokens)
