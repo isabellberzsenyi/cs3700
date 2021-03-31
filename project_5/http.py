@@ -13,23 +13,6 @@ def connectSocket(hostname):
   except (ValueError, KeyError, TypeError) as e:
     print(e)
     return -1
-  
-def checkResponseStatus(response_status):
-  if response_status == '200':
-      print("OK")
-      return 1
-  elif response_status == '302':
-    print('FOUND')
-    return 1
-  elif response_status == '301':
-    print('MOVED')
-    return -1
-  elif (response_status == '403') or (response_status == '404'):
-    print('NOT FOUND')
-    return -1
-  elif response_status == '500':
-    print('ERROR')
-    return -1
 
 def getMiddlewareToken(response):
   p = TokenParse()

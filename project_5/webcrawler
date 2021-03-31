@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import http
+import sys
 from html.parser import HTMLParser
 
 TARGET_DOMAIN = "http://webcrawler-site.ccs.neu.edu"
@@ -30,28 +31,49 @@ class LinkFetcher(HTMLParser):
 
   def handle_data(self, data):
     if self.hasKey:
-      print(f'Found key!\n {data}')
-      self.secret_keys.append(data)
+      # print(f'Found key!\n {data}')
+      key = data.split("FLAG: ")[1]
+      self.secret_keys.append(key)
       self.hasKey = False
 
+# berzsenyi.i
+# 74BMDIXZBUIK2EXD
 
-def login():
+def login(username, password):
   response = http.GET(f"{TARGET_DOMAIN}/accounts/login/?next=/fakebook/")
   tokens = http.getCookies(response)
   middleware_token = http.getMiddlewareToken(response)
-  body = "username=berzsenyi.i&password=74BMDIXZBUIK2EXD&csrfmiddlewaretoken="+middleware_token+"&next=%2Ffakebook%2F"
+  body = f"username={username}&password={password}&csrfmiddlewaretoken="+middleware_token+"&next=%2Ffakebook%2F"
   response = http.POST("http://webcrawler-site.ccs.neu.edu/accounts/login/", tokens, body)
   tokens = http.getCookies(response)
-
+  print('logged in')
   return tokens
-  
+
+def getNewLocation(response):
+  print('get new location')
+  if 'Location' in response:
+    split = response.split('\n')
+    for x in split:
+      if 'Location' in x:
+        return x.replace("Location: ", "")
 
 def parsePageResponse(tokens, path):
-  response = http.GET(f"{TARGET_DOMAIN}{path}", tokens)
+  request_path = f"{TARGET_DOMAIN}{path}"
+  response = http.GET(request_path, tokens)
+  response_status = response.split("\n")[0].split(" ")[1]
+  while response_status != '200' and response_status != '302':  
+    print('not 200 or 302')
+    if response_status == '301':
+      request_path = getNewLocation(response)
+      return
+    elif (response_status == '403') or (response_status == '404'):
+      return
+    response = http.GET(request_path, tokens)
+    response_status = response.split("\n")[0].split(" ")[1]
 
   linkFetch = LinkFetcher()
   linkFetch.feed(response)
-
+  
   return {
     'links': linkFetch.links,
     'secret_keys': linkFetch.secret_keys 
@@ -70,18 +92,20 @@ def crawl(tokens, init_path):
     if current_path in visited or is_invalid(current_path):
       continue
     else:
-      print(current_path)
       visited.append(current_path)
       parsed_response = parsePageResponse(tokens, current_path)
       secret_keys.extend(parsed_response['secret_keys'])
       queue.extend(parsed_response['links'])
   return secret_keys
 
-def main():
-  tokens = login()
+def main(username, password):
+  tokens = login(username, password)
   secret_keys=crawl(tokens, FAKEBOOK_ROOT)
-  print(secret_keys)
+  for key in secret_keys:
+    print(key)
   return secret_keys
 
 if __name__ == "__main__":
-  main()
+  username = sys.argv[1]
+  password = sys.argv[2]
+  main(username, password)
