@@ -35,9 +35,6 @@ class LinkFetcher(HTMLParser):
       self.secret_keys.append(key)
       self.hasKey = False
 
-# berzsenyi.i
-# 74BMDIXZBUIK2EXD
-
 def login(username, password):
   response = http.GET(f"{TARGET_DOMAIN}/accounts/login/?next=/fakebook/")
   tokens = http.getCookies(response)
@@ -45,6 +42,7 @@ def login(username, password):
   body = f"username={username}&password={password}&csrfmiddlewaretoken="+middleware_token+"&next=%2Ffakebook%2F"
   response = http.POST("http://webcrawler-site.ccs.neu.edu/accounts/login/", tokens, body)
   tokens = http.getCookies(response)
+  print("login")
   return tokens
 
 def getNewLocation(response):

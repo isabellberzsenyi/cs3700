@@ -52,7 +52,7 @@ def POST(url, tokens, body):
   if s == -1:
     sys.exit()
   
-  data = f"POST {parsed_url.path} HTTP/1.0\r\n"
+  data = f"POST {parsed_url.path} HTTP/1.1\r\n"
   data += f"Host: {parsed_url.hostname}\r\n"
   data += "Content-Type: application/x-www-form-urlencoded\r\n"
   data += "Content-Length: " + str(len(body)) + "\r\n"
@@ -66,7 +66,7 @@ def POST(url, tokens, body):
     response = ""
     while True:
       response = s.recv(8192).decode('utf-8')
-      if '\r\n' in response:
+      if '\r\n\r\n' in response:
         break
     
     
@@ -79,13 +79,11 @@ def POST(url, tokens, body):
 def GET(url, tokens = ""):
   parsed_url = urlparse(url)
 
-  # Should probably parse this into some useable object?? 
-  # Or leave it as text idk - I'd want a library to pull the relevant info for me
   s = connectSocket(parsed_url.hostname)
   if s == -1:
     sys.exit()
 
-  data = f"GET {parsed_url.path} HTTP/1.0\r\nHost: {parsed_url.hostname}"
+  data = f"GET {parsed_url.path} HTTP/1.1\r\nHost: {parsed_url.hostname}"
   if tokens:
     data += "\r\n"
     data += f"Cookie: csrftoken="+tokens["csrftoken"]+"; sessionid="+tokens["sessionid"]+";\n\n"
@@ -102,8 +100,6 @@ def GET(url, tokens = ""):
 
       if '</html>' in response:
         break
-    # probably parse things into header, body, etc?
-    # parse csrftoken from response
   except socket.error as e:
     print(e)
   
