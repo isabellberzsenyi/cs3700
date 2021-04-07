@@ -27,7 +27,7 @@ class Replica:
 		if response:
 			self.number_votes += 1
 
-		if self.number_votes >= ((self.replica_ids / 2) + 1):
+		if self.number_votes >= ((len(self.replica_ids) / 2) + 1):
 		  # we are the leader now
 
 	def respondVote(self, term, candidateId, lastLogIdx, lastLogTerm, socket):
@@ -41,11 +41,10 @@ class Replica:
 
 	def requestVote(self, socket):
 	  self.current_term += 1
-    self.number_votes = 0
+      self.number_votes = 0
 
-	  for replica in replica_ids:
-			msg = {'src': self.id, 'dst ': replica, 'type': 'request_vote', 'term': self.current_term, 'candidateId': self.id, 'lastLogIndex': len(self.log) - 1, 'lastLogTerm': self.log[-1]['term']}
-			socket.send(json.dumps(msg))
+	  msg = {'src': self.id, 'dst ': "FFFF", 'type': 'request_vote', 'term': self.current_term, 'candidateId': self.id, 'lastLogIndex': len(self.log) - 1, 'lastLogTerm': self.log[-1]['term']}
+	  socket.send(json.dumps(msg))
 
 	def run(self):
 		# Connect to the network. All messages to/from other replicas and clients will
