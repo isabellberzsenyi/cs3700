@@ -68,6 +68,13 @@ class Replica:
 		msg = {'src': self.id, 'dst': "FFFF", 'leader': self.leader, 'type': 'request_vote', 'term': self.current_term, 'candidateId': self.id, 'lastLogIndex': last_log_idx, 'lastLogTerm': last_log_term}
 		socket.send(json.dumps(msg))
 
+	def sendHeartbeat(self, socket):
+		last_log_idx = len(self.log) - 1 if len(self.log) else 0
+		last_log_term = self.log[-1]['term'] if len(self.log) else 0
+
+		msg = {'src': self.id, 'dst': "FFFF", 'leader': self.leader, 'type': 'append_entry', 'term': self.current_term, 'lastLogIndex': last_log_idx, 'lastLogTerm': last_log_term, 'entries': [], 'leaderCommit': self.commit_index}
+		socket.send(json.dumps(msg))
+
 	def run(self):
 		# Connect to the network. All messages to/from other replicas and clients will
 		# occur over this socket
@@ -86,11 +93,11 @@ class Replica:
 				if msg['type'] in ['get', 'put']:
 					if self.id == self.leader:
 						# if we are the leader then respond
-						print '%s we are the leader get/put dest %s' % (self.id, msg['dst'])
+						#print '%s we are the leader get/put dest %s' % (self.id, msg['dst'])
 						msg = {'src': self.id, 'dst': msg['src'], 'leader': self.id, 'type': 'fail', 'MID': msg['MID']}
 					else:
 						# if we are not the leader, then redirect
-						print '%s we are not the leader, need to redirect'% (self.id)
+						#print '%s we are not the leader, need to redirect'% (self.id)
 						msg = {'src': self.id, 'dst': msg['src'], 'leader': self.leader, 'type': 'redirect', 'MID': msg['MID']}
 					sock.send(json.dumps(msg))
 				elif msg['type'] == 'request_vote':
@@ -99,11 +106,20 @@ class Replica:
 					self.receiveVote(msg['response'], sock)
 				elif msg['type'] == 'leader_elected':
 					self.leaderElected(msg['leader'], msg['term'])
+				elif msg ['type'] == 'append_entry':
+					self.last_election = time.time()
+					# TODO respond to append_entry
+					#self.receiveAppendEntry(sock)
+					continue
 
 			clock = time.time()
-			if clock-self.last_election > self.election_timeout:
+			if clock-self.last_election > self.election_timeout / 2 and self.id == self.leader:
 				# if leader send out heartbeat
+				self.sendHeartbeat(sock)
+				self.last_election = clock
+			elif clock-self.last_election > self.election_timeout:	
 				# if not check if got heartbeat else election
+				#print 'starting election'
 				self.requestVote(sock)
 				self.last_election = clock
 
