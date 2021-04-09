@@ -1,0 +1,145 @@
+#!/usr/bin/env python2
+
+import sys, socket, select, time, json, random
+
+# Your ID number
+my_id = sys.argv[1]
+
+# The ID numbers of all the other replicas
+replica_ids = sys.argv[2:]
+
+def randomTimeout():
+	return ((random.random() * 0.15) + 0.15)
+
+class Replica:
+	def __init__(self, id, replica_ids):
+		self.id = id
+		self.replica_ids = replica_ids # the ids of the other replicas
+		self.last_election = 0 # start time of the last election
+		self.current_term = 0 # number of current term
+		self.voted_for = None # who we voted for in the last election
+		self.log = [] # the log
+		self.kv_store = {} # the key value store, state machine
+		self.commit_index = 0 # idx of last log committed
+		self.last_applied = 0 # idx of last log applied to state
+		self.next_index = None # array of idx of next log entry to send server [LEADER STATE]
+		self.match_index = None # array of idx known to replicated [LEADER STATE]
+		self.number_votes = 0 # number votes received in election
+		self.election_timeout = randomTimeout() # random election timeout
+		self.leader = "FFFF" # known leader
+
+	def leaderElected(self, leaderElected, electionTerm):
+		self.leader = leaderElected
+		self.current_term = electionTerm
+		self.number_votes = 0
+
+	def receiveVote(self, response, socket):
+		if response:
+			self.number_votes += 1
+
+		if self.number_votes >= ((len(self.replica_ids) / 2) + 1):
+			self.leader = self.id
+			# send out message that we are the leader
+			msg = {'src': self.id, 'dst': 'FFFF', 'leader': self.leader, 'type': 'leader_elected', 'term': self.current_term}
+			socket.send(json.dumps(msg))
+			self.number_votes = 0
+
+	def respondVote(self, term, candidateId, lastLogIdx, lastLogTerm, socket):
+		msg = {'src': self.id, 'dst': candidateId, 'leader': self.leader, 'type': 'respond_vote'}
+		self_last_log_term = self.log[-1]['term'] if len(self.log) else 0
+
+		if term < self.current_term: 
+			msg['response'] = False
+			socket.send(json.dumps(msg))
+		elif (self.voted_for is  None or self.voted_for == candidateId) and (lastLogTerm >= self_last_log_term  and lastLogIdx >= (len(self.log) - 1)):
+			self.voted_for = candidateId
+			msg['response'] = True
+			socket.send(json.dumps(msg))
+
+	def requestVote(self, socket):
+		self.current_term += 1
+		self.number_votes = 1
+		self.voted_for = None
+		self.election_timeout = randomTimeout()
+
+		last_log_term = self.log[-1]['term'] if len(self.log) else 0
+		last_log_idx = len(self.log) - 1 if len(self.log) else 0
+
+		msg = {'src': self.id, 'dst': "FFFF", 'leader': self.leader, 'type': 'request_vote', 'term': self.current_term, 'candidateId': self.id, 'lastLogIndex': last_log_idx, 'lastLogTerm': last_log_term}
+		socket.send(json.dumps(msg))
+
+	def sendHeartbeat(self, socket):
+		last_log_idx = len(self.log) - 1 if len(self.log) else 0
+		last_log_term = self.log[-1]['term'] if len(self.log) else 0
+
+		msg = {'src': self.id, 'dst': "FFFF", 'leader': self.leader, 'type': 'append_entry', 'term': self.current_term, 'lastLogIndex': last_log_idx, 'lastLogTerm': last_log_term, 'entries': [], 'leaderCommit': self.commit_index}
+		socket.send(json.dumps(msg))
+		self.election_timeout = time.time()
+
+	def run(self):
+		# Connect to the network. All messages to/from other replicas and clients will
+		# occur over this socket
+		sock = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+		sock.connect(self.id)
+
+		while True:
+			ready = select.select([sock], [], [], 0.1)[0]
+			
+			if sock in ready:
+				msg_raw = sock.recv(32768)
+				
+				if len(msg_raw) == 0: continue
+				msg = json.loads(msg_raw)
+				
+				if msg['type'] in ['get', 'put']:
+					if self.id == self.leader:
+						# check type of message, respond accordingly
+						if msg['type'] == 'get':
+							request = {
+								'src': msg['src'],
+								'key': msg['key'],
+								'MID': msg['MID']
+							}
+							self.log.append({'type': 'get', 'request': request, 'term': self.current_term})
+							value = self.kv_store[msg['key']] if msg['key'] in self.kv_store else ''
+
+							response_msg = {'src': self.id, 'dst': msg['src'], 'leader': self.id, 'type': 'ok', 'MID': msg['MID'], 'value': value}
+						else: 
+							request = {
+								'src': msg['src'],
+								'key': msg['key'],
+								'value': msg['value'],
+								'MID': msg['MID']
+							}
+							self.log.append({'type': 'put', 'request': request, 'term': self.current_term})
+							self.kv_store[msg['key']] = msg['value']
+
+							response_msg = {'src': self.id, 'dst': msg['src'], 'leader': self.id, 'type': 'ok', 'MID': msg['MID']}
+							self.sendHeartbeat(sock)
+					else:
+						# if we are not the leader, then redirect
+						response_msg = {'src': self.id, 'dst': msg['src'], 'leader': self.leader, 'type': 'redirect', 'MID': msg['MID']}
+
+					sock.send(json.dumps(response_msg))
+				elif msg['type'] == 'request_vote':
+					self.respondVote(msg['term'], msg['candidateId'], msg['lastLogIndex'], msg['lastLogTerm'], sock)
+				elif msg['type'] == 'respond_vote':
+					self.receiveVote(msg['response'], sock)
+				elif msg['type'] == 'leader_elected':
+					self.leaderElected(msg['leader'], msg['term'])
+				elif msg ['type'] == 'append_entry':
+					self.last_election = time.time()
+					continue
+
+			clock = time.time()
+			if clock-self.last_election > self.election_timeout / 2 and self.id == self.leader:
+				# if leader send out heartbeat
+				self.sendHeartbeat(sock)
+			elif clock-self.last_election > self.election_timeout:	
+				# if not check if got heartbeat else election
+				self.requestVote(sock)
+				self.last_election = clock
+
+if __name__ == '__main__':
+	replica = Replica(my_id, replica_ids)
+	replica.run()
