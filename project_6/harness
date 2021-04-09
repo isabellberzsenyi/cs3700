@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+
+def constructRunCommand(fileName):
+  return f"./run.py {fileName}"
+
+if __name__ == "__main__":
+  testFiles = sys.argv[1:] 
+
+  runCommand = ""
+  if len(testFiles) == 0:
+    print("Usage: [testFiles...]")
+    sys.exit()
+ 
+  for idx in range(len(testFiles)-1):
+    filename = testFiles[idx]
+    runCommand += constructRunCommand(filename) + " && "
+
+  runCommand += constructRunCommand(testFiles[-1])
+  print(runCommand)
+  os.system(runCommand)
+  
+ 
