@@ -31,6 +31,7 @@ class Replica:
 
 	def leaderElected(self, leaderElected, electionTerm):
 		self.leader = leaderElected
+		print("NEW LEADER IS " + str(leaderElected) + " REP " + str(self.id) + "changing term from " + str(self.current_term) + "to" + str(electionTerm))
 		self.current_term = electionTerm
 		self.number_votes = 0
 		for replica_id in replica_ids:
@@ -38,12 +39,14 @@ class Replica:
 			self.match_index[replica_id] = 0
 
 	def receiveVote(self, response, socket):
+		print(str(response))
 		if response:
 			self.number_votes += 1
 
 		if self.number_votes >= ((len(self.replica_ids) / 2) + 1):
 			self.leader = self.id
 			# send out message that we are the leader
+			print("LEADER ELECTED: " + str(self.id) + " term " + str(self.current_term))
 			msg = {'src': self.id, 'dst': 'FFFF', 'leader': self.leader, 'type': 'leader_elected', 'term': self.current_term}
 			socket.send(json.dumps(msg))
 			self.number_votes = 0
@@ -55,13 +58,14 @@ class Replica:
 		if term < self.current_term: 
 			msg['response'] = False
 			socket.send(json.dumps(msg))
-		elif (self.voted_for is  None or self.voted_for == candidateId) and (lastLogTerm >= self_last_log_term  and lastLogIdx >= (len(self.log) - 1)):
+		elif (self.voted_for is None or self.voted_for == candidateId) and (lastLogTerm >= self_last_log_term  and lastLogIdx >= (len(self.log) - 1)):
 			self.voted_for = candidateId
 			msg['response'] = True
 			socket.send(json.dumps(msg))
 
 	def requestVote(self, socket):
 		self.current_term += 1
+		print("SELF " + str(self.id) + " current_term " + str(self.current_term))
 		self.number_votes = 1
 		self.voted_for = None
 		self.election_timeout = randomTimeout()
@@ -85,7 +89,7 @@ class Replica:
 		self.election_timeout = time.time()
 
 	def receiveReplyAppendEntry(self, success, term, replica_id, lastLogIdx, socket):
-		print("receive reply" + str(success))
+		#print("receive reply" + str(success))
 		if success: #True
 			self.next_index[replica_id] = len(self.log)
 			self.quorum[lastLogIdx] += 1
@@ -102,7 +106,7 @@ class Replica:
 					#print('key' + msg['key'] + ' value ' + msg['value'])
 				self.commit_index = lastLogIdx
 		else: 
-			print("received false")
+			#print("received false")
 			self.next_index[replica_id] -= 1
 			self.sendAppendEntry(replica_id, socket)	
 
@@ -111,13 +115,13 @@ class Replica:
 		#print("reply append entry")
 		success = True
 		if leaderTerm < self.current_term:
-			print('leader term ' + str(leaderTerm) + ',' + str(self.current_term))
+			print('self id + ' + str(self.id) + " term: " + str(self.current_term) + " leader " + str(leaderId) + " term " + str(leaderTerm))
 			success = False
 		elif len(self.log) <= leaderLastLogIdx:
-			print('leader last log idx is greater')
+			#print('leader last log idx is greater')
 			success = False
 		elif leaderLastLogIdx >= 0 and self.log[leaderLastLogIdx]['term'] != leaderLastLogTerm:
-			print('term mismatch')
+			#print('term mismatch')
 			success = False
 		else:
 			self.log = self.log[:leaderLastLogIdx]
