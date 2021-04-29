@@ -36,10 +36,12 @@ class Replica:
         print("NEW LEADER IS " + str(leaderElected) + " REP " + str(self.id) + "changing term from " + str(self.current_term) + "to" + str(electionTerm))
         self.current_term = electionTerm
         self.number_votes = 0
+        """
         for replica_id in replica_ids:
             self.last_responses[replica_id] = True
             self.next_index[replica_id] = len(self.log)
             self.match_index[replica_id] = 0
+        """
 
     def receiveVote(self,src, response, socket):
         print(self.id + " received vote: " + str(response) +" from " + str(src) + " num votes " + str(self.number_votes))
@@ -50,6 +52,11 @@ class Replica:
             # send out message that we are the leader
             print("LEADER ELECTED: " + str(self.id) + " term " + str(self.current_term))
             msg = {'src': self.id, 'dst': 'FFFF', 'leader': self.leader, 'type': 'leader_elected', 'term': self.current_term}
+            for replica_id in replica_ids:
+                self.last_responses[replica_id] = True
+                self.next_index[replica_id] = len(self.log)
+                self.match_index[replica_id] = 0
+
             socket.send(json.dumps(msg))
             self.number_votes = 0
 
@@ -89,6 +96,7 @@ class Replica:
             print(replica_id + " " +str(len(entries)))
             
         #print('send append entry entries: ' + str(entries))
+            print("len leader log: "+ str(len(self.log)))
         #print('self log ' + str(self.log))
             msg = {'src': self.id, 'dst': replica_id, 'leader': self.leader, 'type': 'append_entry', 'term': self.current_term, 'lastLogIndex': last_log_idx, 'lastLogTerm': last_log_term, 'entries': entries, 'leaderCommit': self.commit_index}
             socket.send(json.dumps(msg))
@@ -99,7 +107,7 @@ class Replica:
         #print("receive reply" + str(success))
         self.last_responses[replica_id]=True
         if success: #True
-            self.next_index[replica_id] = len(self.log)
+            self.next_index[replica_id] = lastLogIdx + 1
             self.quorum[lastLogIdx] += 1
             #print(" plus 1 quorum")
         
@@ -108,9 +116,9 @@ class Replica:
                 for applyIndex in range(self.commit_index, lastLogIdx):
                     msg = self.log[applyIndex]
                     #print(str(msg))
-                    #self.kv_store[msg['request']['key']] = msg['request']['value']
-                    #response_msg = {'src': self.id, 'dst': msg['request']['src'], 'leader': self.id, 'type': 'ok', 'MID': msg['request']['MID']}
-                    #socket.send(json.dumps(response_msg))
+                    self.kv_store[msg['request']['key']] = msg['request']['value']
+                    response_msg = {'src': self.id, 'dst': msg['request']['src'], 'leader': self.id, 'type': 'ok', 'MID': msg['request']['MID']}
+                    socket.send(json.dumps(response_msg))
                     #print('key' + msg['key'] + ' value ' + msg['value'])
                 self.commit_index = lastLogIdx
         else: 
@@ -126,18 +134,18 @@ class Replica:
             print('self id + ' + str(self.id) + " term: " + str(self.current_term) + " leader " + str(leaderId) + " term " + str(leaderTerm))
             success = False
         elif len(self.log) <= leaderLastLogIdx:
-            print(len(self.log))
-            print(self.id)
-            print(leaderId)
-            print('leader last log idx is greater')
+            print("follower log " + str(len(self.log)))
+            print("leader last index " + str(leaderLastLogIdx))
             success = False
         elif leaderLastLogIdx >= 0 and self.log[leaderLastLogIdx]['term'] != leaderLastLogTerm:
             print('term mismatch')
             success = False
         else:
             print(self.id + " EXTENDING LOG")
+            print(str(len(self.log[:leaderLastLogIdx])) + " + " + str(len(entries)) + " == ")  
             self.log = self.log[:leaderLastLogIdx]
             self.log.extend(entries)
+            print(len(self.log))
             if leaderCommit > self.commit_index:
                 commit_to = min(leaderCommit, len(self.log) - 1)
                 for applyIndex in range(self.commit_index, commit_to):
@@ -146,7 +154,7 @@ class Replica:
 
                 self.commit_index = commit_to
             #print(str(entries))
-        msg = {'src': self.id, 'dst': leaderId, 'leader': leaderId, 'type': 'reply_append_entry', 'term': self.current_term, 'success': success, 'lastLogIdx': len(self.log) - 1, "replica_id": self.id}
+        msg = {'src': self.id, 'dst': leaderId, 'leader': leaderId, 'type': 'reply_append_entry', 'term': self.current_term, 'success': success, 'lastLogIdx': len(self.log) - 1 , "replica_id": self.id}
         socket.send(json.dumps(msg))
 
     def sendHeartbeat(self, socket):
@@ -198,11 +206,11 @@ class Replica:
                             self.log.append({'request': request, 'term': self.current_term})
                             self.quorum[len(self.log) - 1] = 0
                             #print("main loop log" + str(self.log))
-                            self.kv_store[msg['key']] = msg['value']
+                            #self.kv_store[msg['key']] = msg['value']
 
-                            response_msg = {'src': self.id, 'dst': msg['src'], 'leader': self.id, 'type': 'ok', 'MID': msg['MID']}
+                            #response_msg = {'src': self.id, 'dst': msg['src'], 'leader': self.id, 'type': 'ok', 'MID': msg['MID']}
 
-                            sock.send(json.dumps(response_msg))
+                            #sock.send(json.dumps(response_msg))
                             for replica_id in self.replica_ids:
                                 if replica_id is not self.id:
                                     self.sendAppendEntry(replica_id, sock)
@@ -218,6 +226,7 @@ class Replica:
                     self.receiveVote(msg['src'],msg['response'], sock)
                 elif msg['type'] == 'leader_elected':
                     self.leaderElected(msg['leader'], msg['term'])
+                    self.last_election = time.time()
                 elif msg['type'] == 'append_entry':
                     if len(msg['entries']):
                         if self.id != self.leader:
